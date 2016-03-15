@@ -17,6 +17,7 @@
 #include <string.h>
 #include <math.h>
 #include <pthread.h>
+#include <time.h>
 
 #define MAX_STRING 100
 #define EXP_TABLE_SIZE 1000
@@ -48,6 +49,14 @@ clock_t start;
 int hs = 0, negative = 5;
 const int table_size = 1e8;
 int *table;
+
+void profile(const char *message_str)
+{
+  time_t current_time = time(NULL);
+  char time_str[MAX_CODE_LENGTH];
+  strftime(time_str, MAX_CODE_LENGTH,"%Y-%m-%d %H:%M:%S\n",localtime(&current_time));
+  printf("%s: %s\n", message_str, time_str);
+}
 
 void InitUnigramTable() {
   int a, i;
@@ -340,23 +349,33 @@ void InitNet() {
   unsigned long long next_random = 1;
   a = posix_memalign((void **)&syn0, 128, (long long)vocab_size * layer1_size * sizeof(real));
   if (syn0 == NULL) {printf("Memory allocation failed\n"); exit(1);}
+  
+  profile("initing syn1 begin");
   if (hs) {
     a = posix_memalign((void **)&syn1, 128, (long long)vocab_size * layer1_size * sizeof(real));
     if (syn1 == NULL) {printf("Memory allocation failed\n"); exit(1);}
     for (a = 0; a < vocab_size; a++) for (b = 0; b < layer1_size; b++)
      syn1[a * layer1_size + b] = 0;
   }
+  profile("initing syn1 end");
+
   if (negative>0) {
     a = posix_memalign((void **)&syn1neg, 128, (long long)vocab_size * layer1_size * sizeof(real));
     if (syn1neg == NULL) {printf("Memory allocation failed\n"); exit(1);}
     for (a = 0; a < vocab_size; a++) for (b = 0; b < layer1_size; b++)
      syn1neg[a * layer1_size + b] = 0;
   }
+
+  profile("initing syn0 begin");
   for (a = 0; a < vocab_size; a++) for (b = 0; b < layer1_size; b++) {
     next_random = next_random * (unsigned long long)25214903917 + 11;
     syn0[a * layer1_size + b] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / layer1_size;
   }
+  profile("initing syn0 end");
+
+  profile("computing huffman codes begin");
   CreateBinaryTree();
+  profile("computing huffman codes end");
 }
 
 void *TrainModelThread(void *id) {
@@ -547,14 +566,26 @@ void TrainModel() {
   pthread_t *pt = (pthread_t *)malloc(num_threads * sizeof(pthread_t));
   printf("Starting training using file %s\n", train_file);
   starting_alpha = alpha;
+  
+  profile("build vocab begin");
   if (read_vocab_file[0] != 0) ReadVocab(); else LearnVocabFromTrainFile();
+  profile("build vocab end");
+
+  profile("save vocab begin");
   if (save_vocab_file[0] != 0) SaveVocab();
+  profile("save vocab end");
+      
   if (output_file[0] == 0) return;
   InitNet();
   if (negative > 0) InitUnigramTable();
+
+  profile("training model begin");
   start = clock();
   for (a = 0; a < num_threads; a++) pthread_create(&pt[a], NULL, TrainModelThread, (void *)a);
   for (a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
+  profile("training model end");
+
+  profile("saving model begin");
   fo = fopen(output_file, "wb");
   if (classes == 0) {
     // Save the word vectors
@@ -609,6 +640,8 @@ void TrainModel() {
     free(cent);
     free(cl);
   }
+  profile("saving model end");
+  
   fclose(fo);
 }
 
@@ -692,11 +725,15 @@ int main(int argc, char **argv) {
   if ((i = ArgPos((char *)"-classes", argc, argv)) > 0) classes = atoi(argv[i + 1]);
   vocab = (struct vocab_word *)calloc(vocab_max_size, sizeof(struct vocab_word));
   vocab_hash = (int *)calloc(vocab_hash_size, sizeof(int));
-  expTable = (real *)malloc((EXP_TABLE_SIZE + 1) * sizeof(real));
+  expTable = (real *)malloc((EXP_TABLE_SIZE + 1) * sizeof(real));\
+
+  /* profile: computing exp_table */
+  profile("computing exp_table begin");
   for (i = 0; i < EXP_TABLE_SIZE; i++) {
     expTable[i] = exp((i / (real)EXP_TABLE_SIZE * 2 - 1) * MAX_EXP); // Precompute the exp() table
     expTable[i] = expTable[i] / (expTable[i] + 1);                   // Precompute f(x) = x / (x + 1)
   }
+  profile("computing exp_table end");
   TrainModel();
   return 0;
 }
