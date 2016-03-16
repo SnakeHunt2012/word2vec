@@ -1,7 +1,9 @@
+log/
 data/
-corpus/
+model/
 word2vec
-word2pharse
+word2phrase
+distance
 word-analogy
 compute-accuracy
 vocabulary.txt
