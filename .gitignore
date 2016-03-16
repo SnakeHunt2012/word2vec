@@ -1,0 +1,7 @@
+data/
+corpus/
+word2vec
+word2pharse
+word-analogy
+compute-accuracy
+vocabulary.txt
