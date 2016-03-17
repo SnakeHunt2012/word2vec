@@ -25,7 +25,8 @@
 #define MAX_EXP 6
 #define MAX_SENTENCE_LENGTH 1000
 #define MAX_CODE_LENGTH 40
-#define CACHE_SIZE_BY_BYTES (long long) cache_size * 1024 * 1024 * 1024
+//#define CACHE_SIZE_BY_BYTES (long long) cache_size * 1024 * 1024 * 1024
+#define CACHE_SIZE_BY_BYTES (long long) cache_size * 10240
 #define CACHE_SIZE_BY_UNITS CACHE_SIZE_BY_BYTES / sizeof(long long)
 #define CUDA_CALL(x) {\
         const cudaError_t error_code = (x);\
@@ -85,6 +86,10 @@ void *TrainModelThread(void *);
 void TrainModel(void);
 int ArgPos(char *, int , char **);
 
+__global__ void train_model_kernel(const long long *, const long long);
+__device__ long long get_fragment_begin(const long long *, const long long, const unsigned int);
+__device__ long long get_fragment_end(const long long *, const long long, const unsigned int);
+    
 int main(int argc, char **argv) {
     int i;
     if (argc == 1) {
@@ -217,6 +222,13 @@ void charge_gpu_cache()
 
 void launch_kernel()
 {
+    profile("/ launch kernel");
+    //train_model_kernel<<<1024, 256>>>();
+    printf("| -- (cpu) cache_length: %lld\n", cache_length);
+    train_model_kernel<<<4, 8>>>(gpu_cache, cache_length);
+    fflush(stdout);
+    //pause();
+    profile("\\ launch kernel");
 }
 
 void InitUnigramTable()
@@ -871,4 +883,31 @@ int ArgPos(char *str, int argc, char **argv) {
             return a;
         }
     return -1;
+}
+
+__global__ void train_model_kernel(const long long *cache, const long long cache_length)
+{
+    const unsigned int thread_idx = (blockIdx.x * blockDim.x) + threadIdx.x;
+    const long long cache_begin = get_fragment_begin(cache, cache_length, thread_idx);
+    const long long cache_end = get_fragment_end(cache, cache_length, thread_idx);
+
+    
+    
+    printf("| -- (gpu) cache_length: %lld, thread_idx = %ud, cache_begin = %lld, cache_end = %lld\n",
+           cache_length, thread_idx, cache_begin, cache_end);
+}
+
+__device__ long long get_fragment_begin(const long long *cache, const long long cache_length, const unsigned int thread_idx)
+{
+    long long i = (long long) cache_length * thread_idx / gridDim.x / blockDim.x;
+    while (cache[i] != 0 && i > 0) --i;
+    return i;
+}
+
+__device__ long long get_fragment_end(const long long *cache, const long long cache_length, const unsigned int thread_idx)
+{
+    if (threadIdx.x == blockDim.x - 1 && blockIdx.x == gridDim.x - 1)
+        return cache_length;
+    else
+        return get_fragment_begin(cache, cache_length, thread_idx + 1);
 }
