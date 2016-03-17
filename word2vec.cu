@@ -18,12 +18,24 @@
 #include <math.h>
 #include <pthread.h>
 #include <time.h>
+#include <assert.h>
 
 #define MAX_STRING 100
 #define EXP_TABLE_SIZE 1000
 #define MAX_EXP 6
 #define MAX_SENTENCE_LENGTH 1000
 #define MAX_CODE_LENGTH 40
+#define CACHE_SIZE_BY_BYTES (long long) cache_size * 1024 * 1024 * 1024
+#define CACHE_SIZE_BY_UNITS CACHE_SIZE_BY_BYTES / sizeof(long long)
+#define CUDA_CALL(x) {\
+        const cudaError_t error_code = (x);\
+        if (error_code != cudaSuccess) {\
+            printf("CUDA ERROR: %s (error_code = %d), at file %s line %s",\
+                   cudaGetErrorString(error_code), error_code, __FILE__, __LINE__);\
+            cudaDeviceReset();\
+            assert(0);\
+            }\
+        }
 
 const int vocab_hash_size = 30000000;  // Maximum 30 * 0.7 = 21M words in the vocabulary
 
@@ -38,9 +50,9 @@ struct vocab_word {
 char train_file[MAX_STRING], output_file[MAX_STRING];
 char save_vocab_file[MAX_STRING], read_vocab_file[MAX_STRING];
 struct vocab_word *vocab;
-int binary = 0, cbow = 1, debug_mode = 2, window = 5, min_count = 5, num_threads = 12, min_reduce = 1;
+int binary = 0, cbow = 1, debug_mode = 2, window = 5, min_count = 5, num_threads = 12, min_reduce = 1, cache_size = 1;
 int *vocab_hash;
-long long vocab_max_size = 1000, vocab_size = 0, layer1_size = 100;
+long long vocab_max_size = 1000, vocab_size = 0, layer1_size = 100, cache_length = 0, *cpu_cache, *gpu_cache;
 long long train_words = 0, word_count_actual = 0, iter = 5, file_size = 0, classes = 0;
 real alpha = 0.025, starting_alpha, sample = 1e-3;
 real *syn0, *syn1, *syn1neg, *expTable;
@@ -50,15 +62,165 @@ int hs = 0, negative = 5;
 const int table_size = 1e8;
 int *table;
 
+void paulse(void);
+void profile(const char *);
+bool charge_cpu_cache(FILE *);
+void charge_gpu_cache(void);
+void launch_kernel(void);
+void InitUnigramTable(void);
+void ReadWord(char *, FILE *);
+int GetWordHash(char *);
+int SearchVocab(char *);
+int ReadWordIndex(FILE *);
+int AddWordToVocab(char *);
+int VocabCompare(const void *, const void *);
+void SortVocab(void);
+void ReduceVocab(void);
+void CreateBinaryTree(void);
+void LearnVocabFromTrainFile(void);
+void SaveVocab(void);
+void ReadVocab(void);
+void InitNet(void);
+void *TrainModelThread(void *);
+void TrainModel(void);
+int ArgPos(char *, int , char **);
+
+int main(int argc, char **argv) {
+    int i;
+    if (argc == 1) {
+        printf("WORD VECTOR estimation toolkit v 0.1c\n\n");
+        printf("Options:\n");
+        printf("Parameters for training:\n");
+        printf("\t-train <file>\n");
+        printf("\t\tUse text data from <file> to train the model\n");
+        printf("\t-output <file>\n");
+        printf("\t\tUse <file> to save the resulting word vectors / word clusters\n");
+        printf("\t-size <int>\n");
+        printf("\t\tSet size of word vectors; default is 100\n");
+        printf("\t-window <int>\n");
+        printf("\t\tSet max skip length between words; default is 5\n");
+        printf("\t-sample <float>\n");
+        printf("\t\tSet threshold for occurrence of words. Those that appear with higher frequency in the training data\n");
+        printf("\t\twill be randomly down-sampled; default is 1e-3, useful range is (0, 1e-5)\n");
+        printf("\t-hs <int>\n");
+        printf("\t\tUse Hierarchical Softmax; default is 0 (not used)\n");
+        printf("\t-negative <int>\n");
+        printf("\t\tNumber of negative examples; default is 5, common values are 3 - 10 (0 = not used)\n");
+        printf("\t-threads <int>\n");
+        printf("\t\tUse <int> threads (default 12)\n");
+        printf("\t-iter <int>\n");
+        printf("\t\tRun more training iterations (default 5)\n");
+        printf("\t-min-count <int>\n");
+        printf("\t\tThis will discard words that appear less than <int> times; default is 5\n");
+        printf("\t-alpha <float>\n");
+        printf("\t\tSet the starting learning rate; default is 0.025 for skip-gram and 0.05 for CBOW\n");
+        printf("\t-classes <int>\n");
+        printf("\t\tOutput word classes rather than word vectors; default number of classes is 0 (vectors are written)\n");
+        printf("\t-debug <int>\n");
+        printf("\t\tSet the debug mode (default = 2 = more info during training)\n");
+        printf("\t-binary <int>\n");
+        printf("\t\tSave the resulting vectors in binary moded; default is 0 (off)\n");
+        printf("\t-save-vocab <file>\n");
+        printf("\t\tThe vocabulary will be saved to <file>\n");
+        printf("\t-read-vocab <file>\n");
+        printf("\t\tThe vocabulary will be read from <file>, not constructed from the training data\n");
+        printf("\t-cbow <int>\n");
+        printf("\t\tUse the continuous bag of words model; default is 1 (use 0 for skip-gram model)\n");
+        printf("\t-cache <int>\n");
+        printf("\t\tcorpus cache size (in G) when loading sentences to GPU memory\n");
+        printf("\nExamples:\n");
+        printf("./word2vec -train data.txt -output vec.txt -size 200 -window 5 -sample 1e-4 -negative 5 -hs 0 -binary 0 -cbow 1 -iter 3\n\n");
+        return 0;
+    }
+    output_file[0] = 0;
+    save_vocab_file[0] = 0;
+    read_vocab_file[0] = 0;
+    if ((i = ArgPos((char *)"-size", argc, argv)) > 0) layer1_size = atoi(argv[i + 1]);
+    if ((i = ArgPos((char *)"-train", argc, argv)) > 0) strcpy(train_file, argv[i + 1]);
+    if ((i = ArgPos((char *)"-save-vocab", argc, argv)) > 0) strcpy(save_vocab_file, argv[i + 1]);
+    if ((i = ArgPos((char *)"-read-vocab", argc, argv)) > 0) strcpy(read_vocab_file, argv[i + 1]);
+    if ((i = ArgPos((char *)"-debug", argc, argv)) > 0) debug_mode = atoi(argv[i + 1]);
+    if ((i = ArgPos((char *)"-binary", argc, argv)) > 0) binary = atoi(argv[i + 1]);
+    if ((i = ArgPos((char *)"-cbow", argc, argv)) > 0) cbow = atoi(argv[i + 1]);
+    if (cbow) alpha = 0.05;
+    if ((i = ArgPos((char *)"-alpha", argc, argv)) > 0) alpha = atof(argv[i + 1]);
+    if ((i = ArgPos((char *)"-output", argc, argv)) > 0) strcpy(output_file, argv[i + 1]);
+    if ((i = ArgPos((char *)"-window", argc, argv)) > 0) window = atoi(argv[i + 1]);
+    if ((i = ArgPos((char *)"-sample", argc, argv)) > 0) sample = atof(argv[i + 1]);
+    if ((i = ArgPos((char *)"-hs", argc, argv)) > 0) hs = atoi(argv[i + 1]);
+    if ((i = ArgPos((char *)"-negative", argc, argv)) > 0) negative = atoi(argv[i + 1]);
+    if ((i = ArgPos((char *)"-threads", argc, argv)) > 0) num_threads = atoi(argv[i + 1]);
+    if ((i = ArgPos((char *)"-iter", argc, argv)) > 0) iter = atoi(argv[i + 1]);
+    if ((i = ArgPos((char *)"-min-count", argc, argv)) > 0) min_count = atoi(argv[i + 1]);
+    if ((i = ArgPos((char *)"-classes", argc, argv)) > 0) classes = atoi(argv[i + 1]);
+    if ((i = ArgPos((char *)"-cache", argc, argv)) > 0) cache_size = atoi(argv[i + 1]);
+    vocab = (struct vocab_word *)calloc(vocab_max_size, sizeof(struct vocab_word));
+    vocab_hash = (int *)calloc(vocab_hash_size, sizeof(int));
+    expTable = (real *)malloc((EXP_TABLE_SIZE + 1) * sizeof(real));\
+
+    /* profile: computing exp_table */
+    profile("/ computing exp_table");
+    for (i = 0; i < EXP_TABLE_SIZE; i++) {
+        expTable[i] = exp((i / (real)EXP_TABLE_SIZE * 2 - 1) * MAX_EXP); // Precompute the exp() table
+        expTable[i] = expTable[i] / (expTable[i] + 1);                   // Precompute f(x) = x / (x + 1)
+    }
+    profile("\\ computing exp_table");
+    TrainModel();
+    return 0;
+}
+
+void pause()
+{
+    printf("pause ...");
+    while (1) ;
+}
+
 void profile(const char *message_str)
 {
     time_t current_time = time(NULL);
     char time_str[MAX_CODE_LENGTH];
-    strftime(time_str, MAX_CODE_LENGTH,"%Y-%m-%d %H:%M:%S\n",localtime(&current_time));
-    printf("%s: %s\n", message_str, time_str);
+    strftime(time_str, MAX_CODE_LENGTH,"%Y-%m-%d %H:%M:%S",localtime(&current_time));
+    printf("%s: %s\n", message_str, time_str); fflush(stdout);
 }
 
-void InitUnigramTable() {
+bool charge_cpu_cache(FILE *fp)
+{
+    long long word, last_cache_length = cache_length;
+    cache_length = 0;
+    profile("| / charge cpu cache");
+    if (last_cache_length > 0 && last_cache_length < CACHE_SIZE_BY_UNITS) // bug: if a sentence is of (cache_size * 1GB) length
+        while (last_cache_length < CACHE_SIZE_BY_UNITS)
+            cpu_cache[cache_length++] = cpu_cache[last_cache_length++];
+    while (cache_length < CACHE_SIZE_BY_UNITS) {
+        if (feof(fp)) {
+            printf("encounter EOF\n"); fflush(stdout);
+            return true;
+        }
+        if ((word = ReadWordIndex(fp)) >= 0)
+            cpu_cache[cache_length++] = word;
+    }
+    printf("| | -- (cpu) cache_length = %lld\n", cache_length);
+    profile("| \\ charge cpu cache");
+    return false;
+}
+
+void charge_gpu_cache()
+{
+    long long i = cache_length;
+    while (i > 0 && cpu_cache[i - 1] != 0) --i;
+    if (i > 0) cache_length = i;
+    profile("| / charge gpu cache");
+    printf("| | -- (gpu) cache_length = %lld, cpu_cache[%lld] = %lld\n", cache_length, cache_length - 1, cpu_cache[cache_length - 1]);
+    CUDA_CALL(cudaMemcpy(gpu_cache, cpu_cache, (long long) cache_length * sizeof(long long), cudaMemcpyHostToDevice));
+    profile("| \\ charge gpu cache");
+}
+
+void launch_kernel()
+{
+}
+
+void InitUnigramTable()
+{
     int a, i;
     double train_words_pow = 0;
     double d1, power = 0.75;
@@ -77,7 +239,8 @@ void InitUnigramTable() {
 }
 
 // Reads a single word from a file, assuming space + tab + EOL to be word boundaries
-void ReadWord(char *word, FILE *fin) {
+void ReadWord(char *word, FILE *fin)
+{
     int a = 0, ch;
     while (!feof(fin)) {
         ch = fgetc(fin);
@@ -296,8 +459,8 @@ void LearnVocabFromTrainFile() {
     }
     SortVocab();
     if (debug_mode > 0) {
-        printf("Vocab size: %lld\n", vocab_size);
-        printf("Words in train file: %lld\n", train_words);
+        printf("| -- vocab size: %lld\n", vocab_size);
+        printf("| -- words in train file: %lld\n", train_words);
     }
     file_size = ftell(fin);
     fclose(fin);
@@ -330,8 +493,8 @@ void ReadVocab() {
     }
     SortVocab();
     if (debug_mode > 0) {
-        printf("Vocab size: %lld\n", vocab_size);
-        printf("Words in train file: %lld\n", train_words);
+        printf("| -- vocab size: %lld\n", vocab_size);
+        printf("| -- words in train file: %lld\n", train_words);
     }
     fin = fopen(train_file, "rb");
     if (fin == NULL) {
@@ -349,14 +512,14 @@ void InitNet() {
     a = posix_memalign((void **)&syn0, 128, (long long)vocab_size * layer1_size * sizeof(real));
     if (syn0 == NULL) {printf("Memory allocation failed\n"); exit(1);}
   
-    profile("initing syn1 begin");
+    profile("/ initing syn1");
     if (hs) {
         a = posix_memalign((void **)&syn1, 128, (long long)vocab_size * layer1_size * sizeof(real));
         if (syn1 == NULL) {printf("Memory allocation failed\n"); exit(1);}
         for (a = 0; a < vocab_size; a++) for (b = 0; b < layer1_size; b++)
                                              syn1[a * layer1_size + b] = 0;
     }
-    profile("initing syn1 end");
+    profile("\\ initing syn1");
 
     if (negative>0) {
         a = posix_memalign((void **)&syn1neg, 128, (long long)vocab_size * layer1_size * sizeof(real));
@@ -365,16 +528,16 @@ void InitNet() {
                                              syn1neg[a * layer1_size + b] = 0;
     }
 
-    profile("initing syn0 begin");
+    profile("/ initing syn0");
     for (a = 0; a < vocab_size; a++) for (b = 0; b < layer1_size; b++) {
             next_random = next_random * (unsigned long long)25214903917 + 11;
             syn0[a * layer1_size + b] = (((next_random & 0xFFFF) / (real)65536) - 0.5) / layer1_size;
         }
-    profile("initing syn0 end");
+    profile("\\ initing syn0");
 
-    profile("computing huffman codes begin");
+    profile("/ computing huffman codes");
     CreateBinaryTree();
-    profile("computing huffman codes end");
+    profile("\\ computing huffman codes");
 }
 
 void *TrainModelThread(void *id) {
@@ -560,31 +723,85 @@ void *TrainModelThread(void *id) {
 }
 
 void TrainModel() {
+    bool eof_flag = false;
     long a, b, c, d;
-    FILE *fo;
+    unsigned int *gpu_vocab, *gpu_expTable, *gpu_syn0, *gpu_syn1;
+    FILE *fi, *fo;
     pthread_t *pt = (pthread_t *)malloc(num_threads * sizeof(pthread_t));
     printf("Starting training using file %s\n", train_file);
     starting_alpha = alpha;
   
-    profile("build vocab begin");
+    profile("/ build vocab");
     if (read_vocab_file[0] != 0) ReadVocab(); else LearnVocabFromTrainFile();
-    profile("build vocab end");
+    profile("\\ build vocab");
 
-    profile("save vocab begin");
+    profile("/ save vocab");
     if (save_vocab_file[0] != 0) SaveVocab();
-    profile("save vocab end");
+    profile("\\ save vocab");
       
     if (output_file[0] == 0) return;
     InitNet();
     if (negative > 0) InitUnigramTable();
 
-    profile("training model begin");
+    profile("/ memcopy vocab");
+    CUDA_CALL(cudaMalloc((void **) &gpu_vocab, (long long) vocab_size * sizeof(*vocab)));
+    CUDA_CALL(cudaMemcpy(gpu_vocab, vocab, (long long) vocab_size * sizeof(*vocab), cudaMemcpyHostToDevice))
+    profile("\\ memcopy vocab");
+
+    //profile("memcopy vocab_hash");
+    //profile("memcopy vocab_hash");
+
+    profile("/ memcopy expTable");
+    CUDA_CALL(cudaMalloc((void **) &gpu_expTable, (long long) EXP_TABLE_SIZE * sizeof(*expTable)));
+    CUDA_CALL(cudaMemcpy(gpu_expTable, expTable, (long long) EXP_TABLE_SIZE * sizeof(*expTable), cudaMemcpyHostToDevice));
+    profile("\\ memcopy expTable");
+
+    profile("/ memcopy syn0");
+    CUDA_CALL(cudaMalloc((void **) &gpu_syn0, (long long) vocab_size * layer1_size * sizeof(*syn0)));
+    CUDA_CALL(cudaMemcpy(gpu_syn0, syn0, (long long) vocab_size * layer1_size * sizeof(*syn0), cudaMemcpyHostToDevice));
+    profile("\\ memcopy syn0");
+
+    profile("/ memcopy syn1");
+    CUDA_CALL(cudaMalloc((void **) &gpu_syn1, (long long) vocab_size * layer1_size * sizeof(*syn1)));
+    CUDA_CALL(cudaMemcpy(gpu_syn1, syn1, (long long) vocab_size * layer1_size * sizeof(*syn1), cudaMemcpyHostToDevice));
+    profile("\\ memcopy syn1");
+
+    //profile("/ memcopy syn1neg");
+    //profile("\\ memcopy syn1neg");
+
+    profile("/ cpu malloc cache");
+    cpu_cache = (long long *) malloc((long long) CACHE_SIZE_BY_BYTES); // cache_size by GB
+    profile("\\ cpu malloc cache");
+
+    profile("/ gpu malloc cache");
+    CUDA_CALL(cudaMalloc((void **) &gpu_cache, (long long) CACHE_SIZE_BY_BYTES)); // cache_size by GB
+    profile("\\ gpu malloc cache");
+
+    fi = fopen(train_file, "rb");
+    while (!eof_flag) {
+        profile("/ charge cache");
+        eof_flag = charge_cpu_cache(fi);
+        charge_gpu_cache();
+        profile("\\ charge cache");
+        launch_kernel();
+    }
+    fclose(fi);
+
+    profile("/ retrieve syn0");
+    profile("\\ retrieve syn0");
+
+    profile("/ retrieve syn1");
+    profile("\\ retrieve syn1");
+
+    pause();
+
+    profile("/ training model");
     start = clock();
     for (a = 0; a < num_threads; a++) pthread_create(&pt[a], NULL, TrainModelThread, (void *)a);
     for (a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
-    profile("training model end");
+    profile("\\ training model");
 
-    profile("saving model begin");
+    profile("/ saving model");
     fo = fopen(output_file, "wb");
     if (classes == 0) {
         // Save the word vectors
@@ -639,7 +856,7 @@ void TrainModel() {
         free(cent);
         free(cl);
     }
-    profile("saving model end");
+    profile("\\ saving model");
   
     fclose(fo);
 }
@@ -654,85 +871,4 @@ int ArgPos(char *str, int argc, char **argv) {
             return a;
         }
     return -1;
-}
-
-int main(int argc, char **argv) {
-    int i;
-    if (argc == 1) {
-        printf("WORD VECTOR estimation toolkit v 0.1c\n\n");
-        printf("Options:\n");
-        printf("Parameters for training:\n");
-        printf("\t-train <file>\n");
-        printf("\t\tUse text data from <file> to train the model\n");
-        printf("\t-output <file>\n");
-        printf("\t\tUse <file> to save the resulting word vectors / word clusters\n");
-        printf("\t-size <int>\n");
-        printf("\t\tSet size of word vectors; default is 100\n");
-        printf("\t-window <int>\n");
-        printf("\t\tSet max skip length between words; default is 5\n");
-        printf("\t-sample <float>\n");
-        printf("\t\tSet threshold for occurrence of words. Those that appear with higher frequency in the training data\n");
-        printf("\t\twill be randomly down-sampled; default is 1e-3, useful range is (0, 1e-5)\n");
-        printf("\t-hs <int>\n");
-        printf("\t\tUse Hierarchical Softmax; default is 0 (not used)\n");
-        printf("\t-negative <int>\n");
-        printf("\t\tNumber of negative examples; default is 5, common values are 3 - 10 (0 = not used)\n");
-        printf("\t-threads <int>\n");
-        printf("\t\tUse <int> threads (default 12)\n");
-        printf("\t-iter <int>\n");
-        printf("\t\tRun more training iterations (default 5)\n");
-        printf("\t-min-count <int>\n");
-        printf("\t\tThis will discard words that appear less than <int> times; default is 5\n");
-        printf("\t-alpha <float>\n");
-        printf("\t\tSet the starting learning rate; default is 0.025 for skip-gram and 0.05 for CBOW\n");
-        printf("\t-classes <int>\n");
-        printf("\t\tOutput word classes rather than word vectors; default number of classes is 0 (vectors are written)\n");
-        printf("\t-debug <int>\n");
-        printf("\t\tSet the debug mode (default = 2 = more info during training)\n");
-        printf("\t-binary <int>\n");
-        printf("\t\tSave the resulting vectors in binary moded; default is 0 (off)\n");
-        printf("\t-save-vocab <file>\n");
-        printf("\t\tThe vocabulary will be saved to <file>\n");
-        printf("\t-read-vocab <file>\n");
-        printf("\t\tThe vocabulary will be read from <file>, not constructed from the training data\n");
-        printf("\t-cbow <int>\n");
-        printf("\t\tUse the continuous bag of words model; default is 1 (use 0 for skip-gram model)\n");
-        printf("\nExamples:\n");
-        printf("./word2vec -train data.txt -output vec.txt -size 200 -window 5 -sample 1e-4 -negative 5 -hs 0 -binary 0 -cbow 1 -iter 3\n\n");
-        return 0;
-    }
-    output_file[0] = 0;
-    save_vocab_file[0] = 0;
-    read_vocab_file[0] = 0;
-    if ((i = ArgPos((char *)"-size", argc, argv)) > 0) layer1_size = atoi(argv[i + 1]);
-    if ((i = ArgPos((char *)"-train", argc, argv)) > 0) strcpy(train_file, argv[i + 1]);
-    if ((i = ArgPos((char *)"-save-vocab", argc, argv)) > 0) strcpy(save_vocab_file, argv[i + 1]);
-    if ((i = ArgPos((char *)"-read-vocab", argc, argv)) > 0) strcpy(read_vocab_file, argv[i + 1]);
-    if ((i = ArgPos((char *)"-debug", argc, argv)) > 0) debug_mode = atoi(argv[i + 1]);
-    if ((i = ArgPos((char *)"-binary", argc, argv)) > 0) binary = atoi(argv[i + 1]);
-    if ((i = ArgPos((char *)"-cbow", argc, argv)) > 0) cbow = atoi(argv[i + 1]);
-    if (cbow) alpha = 0.05;
-    if ((i = ArgPos((char *)"-alpha", argc, argv)) > 0) alpha = atof(argv[i + 1]);
-    if ((i = ArgPos((char *)"-output", argc, argv)) > 0) strcpy(output_file, argv[i + 1]);
-    if ((i = ArgPos((char *)"-window", argc, argv)) > 0) window = atoi(argv[i + 1]);
-    if ((i = ArgPos((char *)"-sample", argc, argv)) > 0) sample = atof(argv[i + 1]);
-    if ((i = ArgPos((char *)"-hs", argc, argv)) > 0) hs = atoi(argv[i + 1]);
-    if ((i = ArgPos((char *)"-negative", argc, argv)) > 0) negative = atoi(argv[i + 1]);
-    if ((i = ArgPos((char *)"-threads", argc, argv)) > 0) num_threads = atoi(argv[i + 1]);
-    if ((i = ArgPos((char *)"-iter", argc, argv)) > 0) iter = atoi(argv[i + 1]);
-    if ((i = ArgPos((char *)"-min-count", argc, argv)) > 0) min_count = atoi(argv[i + 1]);
-    if ((i = ArgPos((char *)"-classes", argc, argv)) > 0) classes = atoi(argv[i + 1]);
-    vocab = (struct vocab_word *)calloc(vocab_max_size, sizeof(struct vocab_word));
-    vocab_hash = (int *)calloc(vocab_hash_size, sizeof(int));
-    expTable = (real *)malloc((EXP_TABLE_SIZE + 1) * sizeof(real));\
-
-    /* profile: computing exp_table */
-    profile("computing exp_table begin");
-    for (i = 0; i < EXP_TABLE_SIZE; i++) {
-        expTable[i] = exp((i / (real)EXP_TABLE_SIZE * 2 - 1) * MAX_EXP); // Precompute the exp() table
-        expTable[i] = expTable[i] / (expTable[i] + 1);                   // Precompute f(x) = x / (x + 1)
-    }
-    profile("computing exp_table end");
-    TrainModel();
-    return 0;
 }
