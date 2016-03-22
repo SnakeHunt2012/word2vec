@@ -26,7 +26,7 @@
 #define MAX_SENTENCE_LENGTH 1000
 #define MAX_CODE_LENGTH 40
 //#define CACHE_SIZE_BY_BYTES (long long) cache_size * 1024 * 1024 * 1024
-#define CACHE_SIZE_BY_BYTES (long long) cache_size * 10240
+#define CACHE_SIZE_BY_BYTES (long long) cache_size * 1024 * 1024 * 1024
 #define CACHE_SIZE_BY_UNITS CACHE_SIZE_BY_BYTES / sizeof(long long)
 #define CUDA_CALL(x) {\
         const cudaError_t error_code = (x);\
@@ -44,24 +44,51 @@ typedef float real;                    // Precision of float numbers
 
 struct vocab_word {
     long long cn;
-    int *point;
-    char *word, *code, codelen;
+    int point[MAX_CODE_LENGTH];
+    char *word, code[MAX_CODE_LENGTH], codelen;
+};
+
+struct Lock {
+    int *mutex;
+    Lock(void) {
+        int state = 0;
+        cudaMalloc((void**) &mutex, sizeof(int));
+        cudaMemcpy(mutex, &state, sizeof(int), cudaMemcpyHostToDevice);
+    }
+    ~Lock(void) {
+        cudaFree(mutex);
+    }
+    __device__ void lock(void) {
+        while(atomicCAS(mutex, 0, 1) != 0);
+    }
+    __device__ void unlock(void) {
+        atomicExch(mutex, 0);
+    }
 };
 
 char train_file[MAX_STRING], output_file[MAX_STRING];
 char save_vocab_file[MAX_STRING], read_vocab_file[MAX_STRING];
-struct vocab_word *vocab;
-int binary = 0, cbow = 1, debug_mode = 2, window = 5, min_count = 5, num_threads = 12, min_reduce = 1, cache_size = 1;
+struct vocab_word *vocab, *gpu_vocab;
+real *gpu_expTable, *gpu_syn0, *gpu_syn1;
+// int binary = 0, cbow = 1, debug_mode = 2, window = 5, min_count = 5, num_threads = 12, min_reduce = 1, cache_size = 1;
+int binary = 0, cbow = 1, debug_mode = 2, min_count = 5, num_threads = 12, min_reduce = 1, cache_size = 1;
 int *vocab_hash;
 long long vocab_max_size = 1000, vocab_size = 0, layer1_size = 100, cache_length = 0, *cpu_cache, *gpu_cache;
-long long train_words = 0, word_count_actual = 0, iter = 5, file_size = 0, classes = 0;
-real alpha = 0.025, starting_alpha, sample = 1e-3;
+//long long train_words = 0, word_count_actual = 0, iter = 5, file_size = 0, classes = 0;
+long long train_words = 0, file_size = 0, classes = 0;
+//real alpha = 0.025, starting_alpha, sample = 1e-3;
 real *syn0, *syn1, *syn1neg, *expTable;
 clock_t start;
 
 int hs = 0, negative = 5;
 const int table_size = 1e8;
 int *table;
+
+__device__ long long word_count_actual = 0;
+//__device__ real alpha = 0.25;
+__constant__ long long gpu_train_words = 0, iter = 5;
+__constant__ real starting_alpha, sample = 1e-3;
+__constant__ int window;
 
 void paulse(void);
 void profile(const char *);
@@ -82,16 +109,18 @@ void LearnVocabFromTrainFile(void);
 void SaveVocab(void);
 void ReadVocab(void);
 void InitNet(void);
-void *TrainModelThread(void *);
+//void *TrainModelThread(void *);
 void TrainModel(void);
 int ArgPos(char *, int , char **);
 
-__global__ void train_model_kernel(const long long *, const long long);
+__global__ void train_model_kernel(const long long *, const long long, const long long, struct vocab_word *, real *, real *, real *, Lock*);
 __device__ long long get_fragment_begin(const long long *, const long long, const unsigned int);
 __device__ long long get_fragment_end(const long long *, const long long, const unsigned int);
     
 int main(int argc, char **argv) {
-    int i;
+    int i, param_window;
+    real param_alpha, param_sample;
+    long long param_iter;
     if (argc == 1) {
         printf("WORD VECTOR estimation toolkit v 0.1c\n\n");
         printf("Options:\n");
@@ -147,21 +176,27 @@ int main(int argc, char **argv) {
     if ((i = ArgPos((char *)"-debug", argc, argv)) > 0) debug_mode = atoi(argv[i + 1]);
     if ((i = ArgPos((char *)"-binary", argc, argv)) > 0) binary = atoi(argv[i + 1]);
     if ((i = ArgPos((char *)"-cbow", argc, argv)) > 0) cbow = atoi(argv[i + 1]);
-    if (cbow) alpha = 0.05;
-    if ((i = ArgPos((char *)"-alpha", argc, argv)) > 0) alpha = atof(argv[i + 1]);
+    if (cbow) param_alpha = 0.05;
+    if ((i = ArgPos((char *)"-alpha", argc, argv)) > 0) param_alpha = atof(argv[i + 1]);
     if ((i = ArgPos((char *)"-output", argc, argv)) > 0) strcpy(output_file, argv[i + 1]);
-    if ((i = ArgPos((char *)"-window", argc, argv)) > 0) window = atoi(argv[i + 1]);
-    if ((i = ArgPos((char *)"-sample", argc, argv)) > 0) sample = atof(argv[i + 1]);
+    if ((i = ArgPos((char *)"-window", argc, argv)) > 0) param_window = atoi(argv[i + 1]);
+    if ((i = ArgPos((char *)"-sample", argc, argv)) > 0) param_sample = atof(argv[i + 1]);
     if ((i = ArgPos((char *)"-hs", argc, argv)) > 0) hs = atoi(argv[i + 1]);
     if ((i = ArgPos((char *)"-negative", argc, argv)) > 0) negative = atoi(argv[i + 1]);
     if ((i = ArgPos((char *)"-threads", argc, argv)) > 0) num_threads = atoi(argv[i + 1]);
-    if ((i = ArgPos((char *)"-iter", argc, argv)) > 0) iter = atoi(argv[i + 1]);
+    if ((i = ArgPos((char *)"-iter", argc, argv)) > 0) param_iter = atoi(argv[i + 1]);
     if ((i = ArgPos((char *)"-min-count", argc, argv)) > 0) min_count = atoi(argv[i + 1]);
     if ((i = ArgPos((char *)"-classes", argc, argv)) > 0) classes = atoi(argv[i + 1]);
     if ((i = ArgPos((char *)"-cache", argc, argv)) > 0) cache_size = atoi(argv[i + 1]);
     vocab = (struct vocab_word *)calloc(vocab_max_size, sizeof(struct vocab_word));
     vocab_hash = (int *)calloc(vocab_hash_size, sizeof(int));
-    expTable = (real *)malloc((EXP_TABLE_SIZE + 1) * sizeof(real));\
+    expTable = (real *)malloc((EXP_TABLE_SIZE + 1) * sizeof(real));
+
+    //CUDA_CALL(cudaMemcpyToSymbol(alpha, &param_alpha, sizeof(param_alpha)));
+    CUDA_CALL(cudaMemcpyToSymbol(starting_alpha, &param_alpha, sizeof(param_alpha)));
+    CUDA_CALL(cudaMemcpyToSymbol(iter, &param_iter, sizeof(param_iter)));
+    CUDA_CALL(cudaMemcpyToSymbol(sample, &param_sample, sizeof(param_sample)));
+    CUDA_CALL(cudaMemcpyToSymbol(window, &param_window, sizeof(param_window)));
 
     /* profile: computing exp_table */
     profile("/ computing exp_table");
@@ -222,12 +257,14 @@ void charge_gpu_cache()
 
 void launch_kernel()
 {
+    Lock lock;
     profile("/ launch kernel");
     //train_model_kernel<<<1024, 256>>>();
     printf("| -- (cpu) cache_length: %lld\n", cache_length);
-    train_model_kernel<<<4, 8>>>(gpu_cache, cache_length);
-    fflush(stdout);
-    //pause();
+    train_model_kernel<<<1024, 256>>>(gpu_cache, cache_length, layer1_size,
+                                 gpu_vocab, gpu_expTable,
+                                 gpu_syn0, gpu_syn1,
+                                 &lock);
     profile("\\ launch kernel");
 }
 
@@ -326,7 +363,7 @@ int VocabCompare(const void *a, const void *b) {
 
 // Sorts the vocabulary by frequency using word counts
 void SortVocab() {
-    int a, size;
+    int a, b, size;
     unsigned int hash;
     // Sort the vocabulary and keep </s> at the first position
     qsort(&vocab[1], vocab_size - 1, sizeof(struct vocab_word), VocabCompare);
@@ -349,8 +386,10 @@ void SortVocab() {
     vocab = (struct vocab_word *)realloc(vocab, (vocab_size + 1) * sizeof(struct vocab_word));
     // Allocate memory for the binary tree construction
     for (a = 0; a < vocab_size; a++) {
-        vocab[a].code = (char *)calloc(MAX_CODE_LENGTH, sizeof(char));
-        vocab[a].point = (int *)calloc(MAX_CODE_LENGTH, sizeof(int));
+        //vocab[a].code = (char *)calloc(MAX_CODE_LENGTH, sizeof(char));
+        for (b = 0; b < MAX_CODE_LENGTH; ++b) vocab[a].code[b] = '\0';
+        //vocab[a].point = (int *)calloc(MAX_CODE_LENGTH, sizeof(int));
+        for (b = 0; b < MAX_CODE_LENGTH; ++b) vocab[a].point[b] = 0;
     }
 }
 
@@ -552,6 +591,7 @@ void InitNet() {
     profile("\\ computing huffman codes");
 }
 
+/* debug
 void *TrainModelThread(void *id) {
     long long a, b, d, cw, word, last_word, sentence_length = 0, sentence_position = 0;
     long long word_count = 0, last_word_count = 0, sen[MAX_SENTENCE_LENGTH + 1];
@@ -733,16 +773,15 @@ void *TrainModelThread(void *id) {
     free(neu1e);
     pthread_exit(NULL);
 }
+debug */
 
 void TrainModel() {
     bool eof_flag = false;
     long a, b, c, d;
-    unsigned int *gpu_vocab, *gpu_expTable, *gpu_syn0, *gpu_syn1;
     FILE *fi, *fo;
     pthread_t *pt = (pthread_t *)malloc(num_threads * sizeof(pthread_t));
-    printf("Starting training using file %s\n", train_file);
-    starting_alpha = alpha;
-  
+    printf("Starting training using file %s\n", train_file); 
+ 
     profile("/ build vocab");
     if (read_vocab_file[0] != 0) ReadVocab(); else LearnVocabFromTrainFile();
     profile("\\ build vocab");
@@ -789,6 +828,8 @@ void TrainModel() {
     CUDA_CALL(cudaMalloc((void **) &gpu_cache, (long long) CACHE_SIZE_BY_BYTES)); // cache_size by GB
     profile("\\ gpu malloc cache");
 
+    CUDA_CALL(cudaMemcpyToSymbol(gpu_train_words, &train_words, sizeof(train_words)));
+
     fi = fopen(train_file, "rb");
     while (!eof_flag) {
         profile("/ charge cache");
@@ -800,18 +841,17 @@ void TrainModel() {
     fclose(fi);
 
     profile("/ retrieve syn0");
+    CUDA_CALL(cudaMemcpy(syn0, gpu_syn0, (long long) vocab_size * layer1_size * sizeof(*syn0), cudaMemcpyDeviceToHost));
     profile("\\ retrieve syn0");
 
     profile("/ retrieve syn1");
-    profile("\\ retrieve syn1");
+    CUDA_CALL(cudaMemcpy(syn1, gpu_syn1, (long long) vocab_size * layer1_size * sizeof(*syn0), cudaMemcpyDeviceToHost));    profile("\\ retrieve syn1");
 
-    pause();
-
-    profile("/ training model");
-    start = clock();
-    for (a = 0; a < num_threads; a++) pthread_create(&pt[a], NULL, TrainModelThread, (void *)a);
-    for (a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
-    profile("\\ training model");
+    //profile("/ training model");
+    //start = clock();
+    ////for (a = 0; a < num_threads; a++) pthread_create(&pt[a], NULL, TrainModelThread, (void *)a);
+    ////for (a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
+    //profile("\\ training model");
 
     profile("/ saving model");
     fo = fopen(output_file, "wb");
@@ -885,16 +925,130 @@ int ArgPos(char *str, int argc, char **argv) {
     return -1;
 }
 
-__global__ void train_model_kernel(const long long *cache, const long long cache_length)
+__global__ void train_model_kernel(const long long *cache, const long long cache_length, const long long layer1_size,
+                                   struct vocab_word *vocab, real *expTable, real *syn0, real *syn1,
+                                   Lock *lock)
 {
     const unsigned int thread_idx = (blockIdx.x * blockDim.x) + threadIdx.x;
     const long long cache_begin = get_fragment_begin(cache, cache_length, thread_idx);
     const long long cache_end = get_fragment_end(cache, cache_length, thread_idx);
+    long long word, last_word, word_count = 0, last_word_count = 0;
+    long long word_count_actual = 0; // overwrite __device__ global variable word_count_acutal
+    long long cache_idx = cache_begin, local_iter = iter;
+    long long sen[MAX_SENTENCE_LENGTH + 1], sentence_length = 0, sentence_position = 0;
+    long long a, b, c, d, cw, l2;
+    unsigned long long next_random = (long long) thread_idx;
+    real f, g, alpha = 0.05; // overwrite __device__ global variable alpha
+    //real *neu1 = (real *) malloc(layer1_size * sizeof(*neu1));
+    //real *neu1e = (real *) malloc(layer1_size * sizeof(*neu1e));
+    real neu1[200];
+    real neu1e[200];
 
+    while (1) {
+        if (word_count - last_word_count > 1000) {
+            //lock->lock();
+            word_count_actual += word_count - last_word_count;
+            last_word_count = word_count;
+            alpha = starting_alpha * (1 - (long long) (word_count_actual * blockDim.x * gridDim.x) / (real) (iter * gpu_train_words + 1));
+            if (alpha < starting_alpha * 0.0001) alpha = starting_alpha * 0.0001;
+            printf("%dAlpha: %f  word_count_actual: %lld  blockDim.x: %ud  gridDim.x: %ud  iter: %lld  gpu_train_words: %lld", alpha, word_count_actual, blockDim.x, gridDim.x, iter, gpu_train_words);
+            //lock->unlock();
+        }
+        
+        if (sentence_length == 0) {
+            while (1) {
+                word = cache[cache_idx++];
+                if (cache_idx >= cache_end) break;
+                if (word == -1) continue;
+                ++word_count;
+                if (word == 0) break;
+                if (sample > 0) {
+                    real ran = (sqrt(vocab[word].cn / (sample * gpu_train_words)) + 1) * (sample * gpu_train_words) / vocab[word].cn;
+                    next_random = next_random * (unsigned long long)25214903917 + 11;
+                    if (ran < (next_random & 0xFFFF) / (real)65536) continue;
+                }
+                sen[sentence_length++] = word;
+                if (sentence_length >= MAX_SENTENCE_LENGTH) break;
+            }
+            sentence_position = 0;
+        }
     
+        if (cache_idx >= cache_end) {
+            //lock->lock();
+            word_count_actual += word_count - last_word_count;
+            //lock->unlock();
+            --local_iter;
+            if (local_iter == 0) break;
+            word_count = 0;
+            last_word_count = 0;
+            sentence_length = 0;
+            cache_idx = cache_begin;
+            continue;
+        }
+
+        word = sen[sentence_position];
+        if (word == -1) continue;
+        for (c = 0; c < layer1_size; ++c) neu1[c] = 0;
+        for (c = 0; c < layer1_size; ++c) neu1e[c] = 0;
+        next_random = next_random * (unsigned long long) 25214903917 + 11;
+        b = next_random % window;
+        if (1) { // train cbow: if (cbow) {
+            // in -> hidden            
+            cw = 0;
+            for (a = b; a < window * 2 + 1 - b; ++a) if (a != window) {
+                    c = sentence_position - window + a;
+                    if (c < 0) continue;
+                    if (c >= sentence_length) continue;
+                    last_word = sen[c];
+                    if (last_word == -1) continue;
+                    for (c = 0; c < layer1_size; c++) neu1[c] += syn0[c + last_word * layer1_size];
+                    ++cw;
+                }
+            if (cw) {
+                for (c = 0; c < layer1_size; c++) neu1[c] /= cw;
+                if (1) for (d = 0; d < vocab[word].codelen; ++d) { // using hs: if (hs) { for ...
+                        f = 0;
+                        l2 = vocab[word].point[d] * layer1_size;
+                        // Propagate hidden -> output
+                        for (c = 0; c < layer1_size; c++) f += neu1[c] * syn1[c + l2];
+                        if (f <= -MAX_EXP) continue;
+                        else if (f >= MAX_EXP) continue;
+                        else f = expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))];
+                        // 'g' is the gradient multiplied by the learning rate
+                        g = (1 - vocab[word].code[d] - f) * alpha;
+                        // Propagate errors output -> hidden
+                        for (c = 0; c < layer1_size; c++) neu1e[c] += g * syn1[c + l2];
+                        // Learn weights hidden -> output
+                        for (c = 0; c < layer1_size; c++) syn1[c + l2] += g * neu1[c];
+                    }
+                // NEGATIVE SAMPLING
+                /*
+                if (negative > 0) {
+                    printf("negative not implemented\n");
+                    assert(0);
+                }
+                */
+                // hidden -> in
+                for (a = b; a < window * 2 + 1 - b; a++) if (a != window) {
+                        c = sentence_position - window + a;
+                        if (c < 0) continue;
+                        if (c >= sentence_length) continue;
+                        last_word = sen[c];
+                        if (last_word == -1) continue;
+                        for (c = 0; c < layer1_size; c++) syn0[c + last_word * layer1_size] += neu1e[c];
+                    }
+            }
+        } else { // train skip-gram
+            printf("skip-gram not implemented\n");
+            assert(0);
+        }
     
-    printf("| -- (gpu) cache_length: %lld, thread_idx = %ud, cache_begin = %lld, cache_end = %lld\n",
-           cache_length, thread_idx, cache_begin, cache_end);
+        ++sentence_position;
+        if (sentence_position >= sentence_length) {
+            sentence_length = 0;
+            continue;
+        }
+    }
 }
 
 __device__ long long get_fragment_begin(const long long *cache, const long long cache_length, const unsigned int thread_idx)
