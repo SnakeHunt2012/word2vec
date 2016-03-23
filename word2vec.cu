@@ -85,7 +85,7 @@ const int table_size = 1e8;
 int *table;
 
 __device__ long long word_count_actual = 0;
-//__device__ real alpha = 0.25;
+__device__ real alpha = 0.25;
 __constant__ long long gpu_train_words = 0, iter = 5;
 __constant__ real starting_alpha, sample = 1e-3;
 __constant__ int window;
@@ -113,7 +113,7 @@ void InitNet(void);
 void TrainModel(void);
 int ArgPos(char *, int , char **);
 
-__global__ void train_model_kernel(const long long *, const long long, const long long, struct vocab_word *, real *, real *, real *, Lock*);
+__global__ void train_model_kernel(const long long *, const long long, const long long, const struct vocab_word *, const real *, real *, real *, Lock*);
 __device__ long long get_fragment_begin(const long long *, const long long, const unsigned int);
 __device__ long long get_fragment_end(const long long *, const long long, const unsigned int);
     
@@ -192,7 +192,7 @@ int main(int argc, char **argv) {
     vocab_hash = (int *)calloc(vocab_hash_size, sizeof(int));
     expTable = (real *)malloc((EXP_TABLE_SIZE + 1) * sizeof(real));
 
-    //CUDA_CALL(cudaMemcpyToSymbol(alpha, &param_alpha, sizeof(param_alpha)));
+    CUDA_CALL(cudaMemcpyToSymbol(alpha, &param_alpha, sizeof(param_alpha)));
     CUDA_CALL(cudaMemcpyToSymbol(starting_alpha, &param_alpha, sizeof(param_alpha)));
     CUDA_CALL(cudaMemcpyToSymbol(iter, &param_iter, sizeof(param_iter)));
     CUDA_CALL(cudaMemcpyToSymbol(sample, &param_sample, sizeof(param_sample)));
@@ -259,12 +259,36 @@ void launch_kernel()
 {
     Lock lock;
     profile("/ launch kernel");
-    //train_model_kernel<<<1024, 256>>>();
-    printf("| -- (cpu) cache_length: %lld\n", cache_length);
-    train_model_kernel<<<1024, 256>>>(gpu_cache, cache_length, layer1_size,
-                                 gpu_vocab, gpu_expTable,
-                                 gpu_syn0, gpu_syn1,
-                                 &lock);
+    
+    FILE *debug_in, *debug_out;
+
+    // debug in
+    debug_in = fopen("debug_gpu_in", "w");
+    for (long long i = 0; i < vocab_size; ++i) {
+        fprintf(debug_in, "syn0[%lld]:", i);
+        for (long long j = 0; j < layer1_size; ++j) {
+            fprintf(debug_in, " %f", syn0[i * layer1_size + j]);
+        }
+        fprintf(debug_in, "\n");
+    }
+    fclose(debug_in);
+    
+    train_model_kernel<<<1024, 512>>>(gpu_cache, cache_length, layer1_size,
+                                       gpu_vocab, gpu_expTable,
+                                       gpu_syn0, gpu_syn1,
+                                       &lock);
+
+    // debug out
+    debug_out = fopen("debug_gpu_out", "w");
+    for (long long i = 0; i < vocab_size; ++i) {
+        fprintf(debug_out, "syn0[%lld]:", i);
+        for (long long j = 0; j < layer1_size; ++j) {
+            fprintf(debug_out, " %f", syn0[i * layer1_size + j]);
+        }
+        fprintf(debug_out, "\n");
+    }
+    fclose(debug_out);
+    
     profile("\\ launch kernel");
 }
 
@@ -926,7 +950,7 @@ int ArgPos(char *str, int argc, char **argv) {
 }
 
 __global__ void train_model_kernel(const long long *cache, const long long cache_length, const long long layer1_size,
-                                   struct vocab_word *vocab, real *expTable, real *syn0, real *syn1,
+                                   const struct vocab_word *vocab, const real *expTable, real *syn0, real *syn1,
                                    Lock *lock)
 {
     const unsigned int thread_idx = (blockIdx.x * blockDim.x) + threadIdx.x;
@@ -934,26 +958,30 @@ __global__ void train_model_kernel(const long long *cache, const long long cache
     const long long cache_end = get_fragment_end(cache, cache_length, thread_idx);
     long long word, last_word, word_count = 0, last_word_count = 0;
     long long word_count_actual = 0; // overwrite __device__ global variable word_count_acutal
+    real alpha = 0.05; // overwrite __device__ global variable alpha
     long long cache_idx = cache_begin, local_iter = iter;
     long long sen[MAX_SENTENCE_LENGTH + 1], sentence_length = 0, sentence_position = 0;
     long long a, b, c, d, cw, l2;
     unsigned long long next_random = (long long) thread_idx;
-    real f, g, alpha = 0.05; // overwrite __device__ global variable alpha
+    real f, g;
     //real *neu1 = (real *) malloc(layer1_size * sizeof(*neu1));
     //real *neu1e = (real *) malloc(layer1_size * sizeof(*neu1e));
     real neu1[200];
     real neu1e[200];
+    clock_t timer = clock();
 
     while (1) {
-        if (word_count - last_word_count > 1000) {
+        if (1) {
             //lock->lock();
             word_count_actual += word_count - last_word_count;
             last_word_count = word_count;
-            alpha = starting_alpha * (1 - (long long) (word_count_actual * blockDim.x * gridDim.x) / (real) (iter * gpu_train_words + 1));
+            alpha = starting_alpha * (1 - (long long) (word_count_actual * gridDim.x * blockDim.x) / (real) (iter * gpu_train_words + 1));
             if (alpha < starting_alpha * 0.0001) alpha = starting_alpha * 0.0001;
-            printf("%dAlpha: %f  word_count_actual: %lld  blockDim.x: %ud  gridDim.x: %ud  iter: %lld  gpu_train_words: %lld", alpha, word_count_actual, blockDim.x, gridDim.x, iter, gpu_train_words);
             //lock->unlock();
         }
+        //if (blockIdx.x == 0 && threadIdx.x == 0)
+        //    printf("word_count_actual = %lld, xxx = %lld, word_count = %lld, last_word_count = %lld, alpha = %f, iter = %lld, gpu_train_words = %lld\n",
+        //           word_count_actual, gridDim.x * blockDim.x, word_count, last_word_count, alpha, iter, gpu_train_words);
         
         if (sentence_length == 0) {
             while (1) {
