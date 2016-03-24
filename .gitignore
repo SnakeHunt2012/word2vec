@@ -3,6 +3,7 @@ data/
 model/
 word2vec
 word2phrase
+bin2json
 distance
 word-analogy
 compute-accuracy
