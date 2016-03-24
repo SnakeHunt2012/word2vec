@@ -8,6 +8,8 @@ word2vec : word2vec.c
 	$(CC) word2vec.c -o word2vec $(CFLAGS)
 word2phrase : word2phrase.c
 	$(CC) word2phrase.c -o word2phrase $(CFLAGS)
+bin2json : bin2json.c
+	$(CC) bin2json.c -o bin2json $(CFLAGS)
 distance : distance.c
 	$(CC) distance.c -o distance $(CFLAGS)
 word-analogy : word-analogy.c
