@@ -8,3 +8,4 @@ distance
 word-analogy
 compute-accuracy
 vocabulary.txt
+*.pyc
