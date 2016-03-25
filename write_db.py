@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8
 
+from threading import Thread
 from codecs import open
 from json import loads, dump
 from numpy import array, dot, zeros, sum
@@ -38,6 +39,127 @@ class Query(Base):
     context = Column(String)
     vector = Column(String)
 
+class DBLoadBidwordKernel(Thread):
+
+    def __init__(self, seg_file, base_number, serial_number):
+
+        self.seg_file = seg_file
+        self.base_number = base_number
+        self.serial_number = serial_number
+        super(DBLoadBidwordKernel, self).__init__()
+
+    def run(self):
+
+        engine, session = connect_database()
+    
+        print "computing mean_vec ..."
+        mean_vec = None
+        word_query = session.query(Word)
+        word_count = word_query.count()
+        current_count = 0
+        progress = ProgressBar(maxval = word_count).start()
+        for word in word_query:
+            if mean_vec is None:
+                mean_vec = zeros(len(loads(word.vector)), dtype = "float32")
+            mean_vec += loads(word.vector)
+            current_count += 1
+            progress.update(current_count)
+        mean_vec /= word_count
+        progress.finish()
+        print "word count", word_query.count()
+    
+        with open(self.seg_file, "r", encoding = "utf-8") as fp:
+            counter = 0
+            iterator = 0
+            for line in fp.readlines():
+                if iterator % self.base_number == self.serial_number:
+                    iterator += 1
+                else:
+                    iterator += 1
+                    continue
+                bidword_str = line.strip()
+                word_list = bidword_str.split()
+                if word_list is None or len(word_list) == 0:
+                    continue
+                word_count = 0
+                vector = zeros(mean_vec.shape, dtype = "float32")
+                for word in word_list:
+                    word_record = session.query(Word).filter(Word.context == word.encode("utf-8")).first()
+                    if word_record is not None:
+                        vector += loads(word_record.vector)
+                        word_count += 1
+                    if word_count > 0:
+                        vector /= word_count
+                    else:
+                        vector = mean_vec
+                bidword = Bidword(context = bidword_str.encode("utf-8"), vector = str(vector))
+                session.add(bidword)
+                counter += 1
+                if (counter % 1000 == 0):
+                    session.commit()
+            session.commit()
+
+class DBLoadQueryKernel(Thread):
+
+    def __init__(self, seg_file, base_number, serial_number):
+
+        self.seg_file = seg_file
+        self.base_number = base_number
+        self.serial_number = serial_number
+        super(DBLoadQueryKernel, self).__init__()
+
+    def run(self):
+
+        engine, session = connect_database()
+    
+        print "computing mean_vec ..."
+        mean_vec = None
+        word_query = session.query(Word)
+        word_count = word_query.count()
+        current_count = 0
+        progress = ProgressBar(maxval = word_count).start()
+        for word in word_query:
+            if mean_vec is None:
+                mean_vec = zeros(len(loads(word.vector)), dtype = "float32")
+            mean_vec += loads(word.vector)
+            current_count += 1
+            progress.update(current_count)
+        mean_vec /= word_count
+        progress.finish()
+        print "word count", word_query.count()
+    
+        with open(self.seg_file, "r", encoding = "utf-8") as fp:
+            counter = 0
+            iterator = 0
+            for line in fp.readlines():
+                if iterator % self.base_number == self.serial_number:
+                    iterator += 1
+                else:
+                    iterator += 1
+                    continue
+                query_str = line.strip()
+                word_list = query_str.split()
+                if word_list is None or len(word_list) == 0:
+                    continue
+                word_count = 0
+                vector = zeros(mean_vec.shape, dtype = "float32")
+                for word in word_list:
+                    word_record = session.query(Word).filter(Word.context == word.encode("utf-8")).first()
+                    if word_record is not None:
+                        vector += loads(word_record.vector)
+                        word_count += 1
+                    if word_count > 0:
+                        vector /= word_count
+                    else:
+                        vector = mean_vec
+                query = Query(context = query_str.encode("utf-8"), vector = str(vector))
+                #session.add(query)
+                counter += 1
+                print self.serial_number, iterator, counter
+                #if (counter % 10000 == 0):
+                #    session.commit()
+            #session.commit()
+
 def connect_database():
 
     engine = create_engine("postgresql://huangjingwen@localhost/relevence")
@@ -63,100 +185,31 @@ def db_load_word(json_file):
         session.add(word)
         session.commit()
 
-def db_load_bidword(seg_file):
+def db_load_bidword(seg_file, thread_number = 5):
 
-    engine, session = connect_database()
+    thread_list = []
+    for i in range(thread_number):
+        thread_list.append(DBLoadBidwordKernel(seg_file, thread_number, i))
 
-    print "computing mean_vec ..."
-    mean_vec = None
-    word_query = session.query(Word)
-    word_count = word_query.count()
-    current_count = 0
-    progress = ProgressBar(maxval = word_count).start()
-    for word in word_query:
-        if mean_vec is None:
-            mean_vec = zeros(len(loads(word.vector)), dtype = "float32")
-        mean_vec += loads(word.vector)
-        current_count += 1
-        progress.update(current_count)
-    mean_vec /= word_count
-    progress.finish()
-    print "word count", word_query.count()
+    for thread in thread_list:
+        thread.start()
 
-    with open(seg_file, "r", encoding = "utf-8") as fp:
-        counter = 0
-        for line in fp.readlines():
-            bidword_str = line.strip()
-            word_list = bidword_str.split()
-            if word_list is None or len(word_list) == 0:
-                continue
-            word_count = 0
-            vector = zeros(mean_vec.shape, dtype = "float32")
-            for word in word_list:
-                word_record = session.query(Word).filter(Word.context == word.encode("utf-8")).first()
-                if word_record is not None:
-                    vector += loads(word_record.vector)
-                    word_count += 1
-                if word_count > 0:
-                    vector /= word_count
-                else:
-                    vector = mean_vec
-            bidword = Bidword(context = bidword_str.encode("utf-8"), vector = str(vector))
-            session.add(bidword)
-            counter += 1
-            print counter
-            if (counter % 10000 == 0):
-                session.commit()
-        session.commit()
+    for thread in thread_list:
+        thread.join()
         
-    
-def db_load_query(seg_file):
 
-    engine, session = connect_database()
+def db_load_query(seg_file, thread_number = 3):
 
-    print "computing mean_vec ..."
-    mean_vec = None
-    word_query = session.query(Word)
-    word_count = word_query.count()
-    current_count = 0
-    progress = ProgressBar(maxval = word_count).start()
-    for word in word_query:
-        if mean_vec is None:
-            mean_vec = zeros(len(loads(word.vector)), dtype = "float32")
-        mean_vec += loads(word.vector)
-        current_count += 1
-        progress.update(current_count)
-    mean_vec /= word_count
-    progress.finish()
-    print "word count", word_query.count()
+    thread_list = []
+    for i in range(thread_number):
+        thread_list.append(DBLoadQueryKernel(seg_file, thread_number, i))
 
-    with open(seg_file, "r", encoding = "utf-8") as fp:
-        counter = 0
-        for line in fp.readlines():
-            query_str = line.strip()
-            word_list = query_str.split()
-            if word_list is None or len(word_list) == 0:
-                continue
-            word_count = 0
-            vector = zeros(mean_vec.shape, dtype = "float32")
-            for word in word_list:
-                word_record = session.query(Word).filter(Word.context == word.encode("utf-8")).first()
-                if word_record is not None:
-                    vector += loads(word_record.vector)
-                    word_count += 1
-                if word_count > 0:
-                    vector /= word_count
-                else:
-                    vector = mean_vec
-            query = Query(context = query_str.encode("utf-8"), vector = str(vector))
-            session.add(query)
-            counter += 1
-            print counter
-            if (counter % 10000 == 0):
-                session.commit()
-        session.commit()
-            
+    for thread in thread_list:
+        thread.start()
 
+    for thread in thread_list:
+        thread.join()
+        
 def main():
 
     parser = ArgumentParser()
