@@ -3,41 +3,12 @@
 
 from threading import Thread
 from codecs import open
-from json import loads, dump
-from numpy import array, dot, zeros, sum
+from json import loads
+from numpy import zeros
 from argparse import ArgumentParser
-from collections import OrderedDict
-from sqlalchemy import create_engine
-from sqlalchemy import Table, Column, Integer, String
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
-from progressbar import ProgressBar, Percentage, Bar
+from progressbar import ProgressBar, Bar
 
-Base = declarative_base()
-
-class Word(Base):
-
-    __tablename__ = "word"
-
-    id = Column(Integer, primary_key = True)
-    context = Column(String)
-    vector = Column(String)
-
-class Bidword(Base):
-
-    __tablename__ = "bidword"
-
-    id = Column(Integer, primary_key = True)
-    context = Column(String)
-    vector = Column(String)
-
-class Query(Base):
-
-    __tablename__ = "query"
-
-    id = Column(Integer, primary_key = True)
-    context = Column(String)
-    vector = Column(String)
+from relevence_db import *
 
 class DBLoadBidwordKernel(Thread):
 
@@ -95,6 +66,7 @@ class DBLoadBidwordKernel(Thread):
                 bidword = Bidword(context = bidword_str.encode("utf-8"), vector = str(vector))
                 session.add(bidword)
                 counter += 1
+                print self.serial_number, iterator, counter
                 if (counter % 1000 == 0):
                     session.commit()
             session.commit()
@@ -153,19 +125,12 @@ class DBLoadQueryKernel(Thread):
                     else:
                         vector = mean_vec
                 query = Query(context = query_str.encode("utf-8"), vector = str(vector))
-                #session.add(query)
+                session.add(query)
                 counter += 1
                 print self.serial_number, iterator, counter
-                #if (counter % 10000 == 0):
-                #    session.commit()
-            #session.commit()
-
-def connect_database():
-
-    engine = create_engine("postgresql://huangjingwen@localhost/relevence")
-    session_maker = sessionmaker()
-    session_maker.configure(bind = engine)
-    return engine, session_maker()
+                if (counter % 1000 == 0):
+                    session.commit()
+            session.commit()
 
 def load_dict(input_file):
 
@@ -180,10 +145,15 @@ def db_load_word(json_file):
     engine, session = connect_database()
     
     print "db loading word ..."
+    progress = ProgressBar(maxval = len(word_dict)).start()
+    counter = 0
     for key in word_dict:
         word = Word(context = key, vector = str(word_dict[key]))
         session.add(word)
-        session.commit()
+        counter += 1
+        progress.update(counter)
+    session.commit()
+    progress.finish()
 
 def db_load_bidword(seg_file, thread_number = 5):
 
@@ -198,7 +168,7 @@ def db_load_bidword(seg_file, thread_number = 5):
         thread.join()
         
 
-def db_load_query(seg_file, thread_number = 3):
+def db_load_query(seg_file, thread_number = 1):
 
     thread_list = []
     for i in range(thread_number):
@@ -214,7 +184,7 @@ def main():
 
     parser = ArgumentParser()
     parser.add_argument("input_file", help = "word2vec file in json format")
-    parser.add_argument("table_name", help = "word table")
+    parser.add_argument("table_name", help = "table name")
     args = parser.parse_args()
     
     input_file = args.input_file
