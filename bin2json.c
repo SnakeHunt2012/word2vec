@@ -24,7 +24,7 @@ const long long max_w = 50;            // max length of vocabulary entries
 int main(int argc, char **argv) {
   FILE *f;
   char *vocab, file_name[max_size];
-  float *M;
+  float *M, len;
   long long words, size, a, b;
   if (argc < 2) {
     printf("Usage: ./distance <FILE>\nwhere FILE contains word projections in the BINARY FORMAT\n");
@@ -53,6 +53,12 @@ int main(int argc, char **argv) {
     }
     vocab[b * max_w + a] = 0;
     for (a = 0; a < size; a++) fread(&M[a + b * size], sizeof(float), 1, f);
+    /*
+    len = 0;
+    for (a = 0; a < size; a++) len += M[a + b * size] * M[a + b * size];
+    len = sqrt(len);
+    for (a = 0; a < size; a++) M[a + b * size] /= len;
+    */
   }
   fclose(f);
   
