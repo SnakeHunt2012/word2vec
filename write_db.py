@@ -42,7 +42,7 @@ class DBLoadBidwordKernel(Thread):
         with open(self.seg_file, "r", encoding = "utf-8") as fp:
             counter = 0
             iterator = 0
-            for line in fp.readlines():
+            for line in fp:
                 if iterator % self.base_number == self.serial_number:
                     iterator += 1
                 else:
@@ -103,7 +103,7 @@ class DBLoadQueryKernel(Thread):
         with open(self.seg_file, "r", encoding = "utf-8") as fp:
             counter = 0
             iterator = 0
-            for line in fp.readlines():
+            for line in fp:
                 if iterator % self.base_number == self.serial_number:
                     iterator += 1
                 else:
@@ -168,7 +168,7 @@ def db_load_bidword(seg_file, thread_number = 5):
         thread.join()
         
 
-def db_load_query(seg_file, thread_number = 1):
+def db_load_query(seg_file, thread_number = 2):
 
     thread_list = []
     for i in range(thread_number):
