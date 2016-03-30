@@ -4,6 +4,7 @@ model/
 word2vec
 word2phrase
 bin2json
+bin2tsv
 distance
 word-analogy
 compute-accuracy
