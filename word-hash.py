@@ -1,15 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from sys import stdout
 from time import time
 from codecs import open
 from json import loads
-from numpy import zeros, array, matrix
-from numpy.random import random, random_sample
+from numpy import zeros, matrix
+from numpy.random import random
 from argparse import ArgumentParser
 from cudamat import cublas_init, CUDAMatrix, dot
-from copy import copy
 from itertools import combinations
 from heapq import nlargest
 
