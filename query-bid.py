@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from time import time, sleep
+from time import time
 from codecs import open
-from json import loads
-from numpy import zeros, array, matrix
+from numpy import array, matrix
 from numpy.random import random
 from argparse import ArgumentParser
 from cudamat import cublas_init, CUDAMatrix, dot
@@ -149,91 +148,73 @@ def main():
     end = time()
     print "aggregating bidword_hash_dict_list done", duration(start, end)
 
-    profiler_one = 0
-    profiler_two = 0
-    profiler_three = 0
-    profiler_total = 0
-
-    query_matrix = matrix(query_matrix)
-    bidword_matrix = matrix(bidword_matrix)
-    for i in xrange(len(query_list)):
-        time_flag_total = time()
+    print "aggregating query_hash_dict ..."
+    start = time()
+    query_hash_dict = {}
+    for i in xrange(query_hash_matrix.shape[0]):
         hash_string = "".join(['1' if j > 0 else '0' for j in query_hash_matrix[i, :]])
-        candidate_index_set = set([])
-        time_flag_one = time()
-        for j in xrange(hash_number):
-            hash_index_start = j * hash_length
+        if hash_string in query_hash_dict:
+            query_hash_dict[hash_string].add(i)
+        else:
+            query_hash_dict[hash_string] = set([i])
+    end = time()
+    # debug
+    query_counter = 0
+    for hash_key in query_hash_dict:
+        query_counter += len(query_hash_dict[hash_key])
+    print "query counter", query_counter
+    print "aggregating querh_hash_dict done", duration(start, end)
+
+    for hash_string in query_hash_dict:
+        # aggregating query_index_set and bidword_index_set
+        query_index_set = query_hash_dict[hash_string]
+        bidword_index_set = set()
+        for i in xrange(hash_number):
+            hash_index_start = i * hash_length
             hash_index_end = hash_index_start + hash_length
             hash_key = hash_string[hash_index_start:hash_index_end]
-            # exact hash
-            candidate_index_set.update(bidword_hash_dict_list[j][hash_key])
+            # circum hash with hamming distance 0
+            bidword_index_set |= bidword_hash_dict_list[i][hash_key]
             # circum hash with hamming distance 1
             for first_index in xrange(hash_length):
                 circum_hash_key = list(hash_key)
                 circum_hash_key[first_index] = '1' if hash_key[first_index] == '0' else '0'
                 circum_hash_key = "".join(circum_hash_key)
-                if circum_hash_key in bidword_hash_dict_list[j]:
-                    candidate_index_set.update(bidword_hash_dict_list[j][circum_hash_key])
+                if circum_hash_key in bidword_hash_dict_list[i]:
+                    bidword_index_set |= bidword_hash_dict_list[i][circum_hash_key]
             # circum hash with hamming distance 2
             for first_index, second_index in combinations(range(hash_length), 2):
                 circum_hash_key = list(hash_key)
                 circum_hash_key[first_index] = '1' if hash_key[first_index] == '0' else '0'
                 circum_hash_key[second_index] = '1' if hash_key[second_index] == '0' else '0'
                 circum_hash_key = "".join(circum_hash_key)
-                if circum_hash_key in bidword_hash_dict_list[j]:
-                    candidate_index_set.update(bidword_hash_dict_list[j][circum_hash_key])
+                if circum_hash_key in bidword_hash_dict_list[i]:
+                    bidword_index_set |= bidword_hash_dict_list[i][circum_hash_key]
             # circum hash with hamming distance 3
-            #for first_index, second_index, third_index in combinations(range(hash_length), 3):
-            #    circum_hash_key = list(hash_key)
-            #    circum_hash_key[first_index] = '1' if hash_key[first_index] == '0' else '0'
-            #    circum_hash_key[second_index] = '1' if hash_key[second_index] == '0' else '0'
-            #    circum_hash_key[third_index] = '1' if hash_key[third_index] == '0' else '0'
-            #    circum_hash_key = "".join(circum_hash_key)
-            #    if circum_hash_key in bidword_hash_dict_list[j]:
-            #        candidate_index_set.update(bidword_hash_dict_list[j][circum_hash_key])
-        profiler_one += time() - time_flag_one
-        time_flag_two = time()
-        candidate_index_list = list(candidate_index_set)
-        #source_matrix = query_matrix[i, :]
-        #target_matrix = bidword_matrix[candidate_index_list, :].transpose()
-        #sim_list = np.dot(query_matrix[i, :], bidword_matrix[candidate_index_list, :].transpose())[0, :].tolist()[0]
-        sim_list = dot(CUDAMatrix(np.array(query_matrix[i, :])), CUDAMatrix(np.array(bidword_matrix[candidate_index_list, :].transpose()))).asarray()[0, :].tolist()
-        profiler_two += time() - time_flag_two
-        time_flag_three = time()
-        range_list = [[], [], [], [], []]
-        length_before = len(candidate_index_list)
-        for k in xrange(len(candidate_index_list)):
-            range_index = int((sim_list[k] + 0.4999) * 10 - 10)
-            if range_index < 0:
-                continue
-            range_list[range_index].append((sim_list[k], candidate_index_list[k]))
-        sorted_list = []
-        need = 50
-        for k in [4, 3, 2, 1, 0]:
-            if need <= 0:
-                break
-            if len(range_list[k]) < need:
-                sorted_list.extend(sorted(range_list[k], reverse=True))
-                need -= len(range_list[k])
-            else:
-                sorted_list.extend(nlargest(need, range_list[k]))
-                need = 0
-        length_after = len(sorted_list)
-        query_string = query_list[i]
-        profiler_three += time() - time_flag_three
-        print "%s(%d/%d)\t" % (query_string, length_after, length_before),
-        for sim_score, bidword_index in sorted_list:
-            if sim_score < 0.5:
-                break
-            print "%s(%f)" % (bidword_list[bidword_index], sim_score),
-        print
-        
-        profiler_total += time() - time_flag_total
-        if i % 1000 == 0:
-            print "###profile###\ttotal=%f\tone=%f(%f)\ttwo=%f(%f)\tthree=%f(%f)" % (profiler_total,
-                                                                                     profiler_one, profiler_one/profiler_total,
-                                                                                     profiler_two, profiler_two/profiler_total,
-                                                                                     profiler_three, profiler_three/profiler_total)
+            for first_index, second_index, third_index in combinations(range(hash_length), 3):
+                circum_hash_key = list(hash_key)
+                circum_hash_key[first_index] = '1' if hash_key[first_index] == '0' else '0'
+                circum_hash_key[second_index] = '1' if hash_key[second_index] == '0' else '0'
+                circum_hash_key[third_index] = '1' if hash_key[third_index] == '0' else '0'
+                circum_hash_key = "".join(circum_hash_key)
+                if circum_hash_key in bidword_hash_dict_list[i]:
+                    bidword_index_set |= bidword_hash_dict_list[i][circum_hash_key]
+        # computing sim between query_index_list and bidword_index_list
+        query_index_list = list(query_index_set)
+        bidword_index_list = list(bidword_index_set)
+        sim_matrix = dot(CUDAMatrix(query_matrix[query_index_list, :]), CUDAMatrix(bidword_matrix[bidword_index_list, :].transpose())).asarray()
+        for i in xrange(len(query_index_list)):
+            sorted_list = zip(sim_matrix[i], bidword_index_list)
+            length_before = len(sorted_list)
+            sorted_list = nlargest(50, sorted_list)
+            length_after = len(sorted_list)
+            query_string = query_list[query_index_list[i]]
+            print "%s(%d/%d)\t" % (query_string, length_after, length_before),
+            for sim_score, bidword_index in sorted_list:
+                if sim_score < 0.5:
+                    break
+                print "%s(%f)" % (bidword_list[bidword_index], sim_score),
+            print
     
 if __name__ == "__main__":
 
