@@ -125,13 +125,16 @@ def main():
     end = time()
     print "computing hash_matrix done", duration(start, end)
 
-    print "initing hash_dict_list ..."
-    start = time()
-    hash_dict_list = [dict([]) for i in xrange(hash_number)]
-    end = time()
-    print "initing hash_dict_list done", duration(start, end)
+    del cuda_bidword_matrix
+    del cuda_query_matrix
     
-    print "aggregating hash_dict_list ..."
+    print "initing bidword_hash_dict_list ..."
+    start = time()
+    bidword_hash_dict_list = [dict([]) for i in xrange(hash_number)]
+    end = time()
+    print "initing bidword_hash_dict_list done", duration(start, end)
+    
+    print "aggregating bidword_hash_dict_list ..."
     start = time()
     for i in xrange(bidword_hash_matrix.shape[0]):
         hash_string = "".join(['1' if j > 0 else '0' for j in bidword_hash_matrix[i, :]])
@@ -139,15 +142,13 @@ def main():
             hash_index_start = j * hash_length
             hash_index_end = hash_index_start + hash_length
             hash_key = hash_string[hash_index_start:hash_index_end]
-            if hash_key in hash_dict_list[j]:
-                hash_dict_list[j][hash_key].add(i)
+            if hash_key in bidword_hash_dict_list[j]:
+                bidword_hash_dict_list[j][hash_key].add(i)
             else:
-                hash_dict_list[j][hash_key] = set([i])
+                bidword_hash_dict_list[j][hash_key] = set([i])
     end = time()
-    print "aggregating hash_dict_list done", duration(start, end)
+    print "aggregating bidword_hash_dict_list done", duration(start, end)
 
-    #del cuda_bidword_matrix
-    
     profiler_one = 0
     profiler_two = 0
     profiler_three = 0
@@ -165,22 +166,22 @@ def main():
             hash_index_end = hash_index_start + hash_length
             hash_key = hash_string[hash_index_start:hash_index_end]
             # exact hash
-            candidate_index_set.update(hash_dict_list[j][hash_key])
+            candidate_index_set.update(bidword_hash_dict_list[j][hash_key])
             # circum hash with hamming distance 1
             for first_index in xrange(hash_length):
                 circum_hash_key = list(hash_key)
                 circum_hash_key[first_index] = '1' if hash_key[first_index] == '0' else '0'
                 circum_hash_key = "".join(circum_hash_key)
-                if circum_hash_key in hash_dict_list[j]:
-                    candidate_index_set.update(hash_dict_list[j][circum_hash_key])
+                if circum_hash_key in bidword_hash_dict_list[j]:
+                    candidate_index_set.update(bidword_hash_dict_list[j][circum_hash_key])
             # circum hash with hamming distance 2
             for first_index, second_index in combinations(range(hash_length), 2):
                 circum_hash_key = list(hash_key)
                 circum_hash_key[first_index] = '1' if hash_key[first_index] == '0' else '0'
                 circum_hash_key[second_index] = '1' if hash_key[second_index] == '0' else '0'
                 circum_hash_key = "".join(circum_hash_key)
-                if circum_hash_key in hash_dict_list[j]:
-                    candidate_index_set.update(hash_dict_list[j][circum_hash_key])
+                if circum_hash_key in bidword_hash_dict_list[j]:
+                    candidate_index_set.update(bidword_hash_dict_list[j][circum_hash_key])
             # circum hash with hamming distance 3
             #for first_index, second_index, third_index in combinations(range(hash_length), 3):
             #    circum_hash_key = list(hash_key)
@@ -188,8 +189,8 @@ def main():
             #    circum_hash_key[second_index] = '1' if hash_key[second_index] == '0' else '0'
             #    circum_hash_key[third_index] = '1' if hash_key[third_index] == '0' else '0'
             #    circum_hash_key = "".join(circum_hash_key)
-            #    if circum_hash_key in hash_dict_list[j]:
-            #        candidate_index_set.update(hash_dict_list[j][circum_hash_key])
+            #    if circum_hash_key in bidword_hash_dict_list[j]:
+            #        candidate_index_set.update(bidword_hash_dict_list[j][circum_hash_key])
         profiler_one += time() - time_flag_one
         time_flag_two = time()
         candidate_index_list = list(candidate_index_set)
