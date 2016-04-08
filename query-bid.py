@@ -171,8 +171,6 @@ def main():
     profiler_third = 0
 
     for hash_string in query_hash_dict:
-        time_flag_total = time()
-        time_flag_first = time()
         # aggregating query_index_set and bidword_index_set
         query_index_set = query_hash_dict[hash_string]
         bidword_index_set = set()
@@ -206,46 +204,60 @@ def main():
             #    circum_hash_key = "".join(circum_hash_key)
             #    if circum_hash_key in bidword_hash_dict_list[i]:
             #        bidword_index_set |= bidword_hash_dict_list[i][circum_hash_key]
-        profiler_first += time() - time_flag_first
-        time_flag_second = time()
         # computing sim between query_index_list and bidword_index_list
         query_index_list = list(query_index_set)
         bidword_index_list = list(bidword_index_set)
         sim_matrix = dot(CUDAMatrix(query_matrix[query_index_list, :]), CUDAMatrix(bidword_matrix[bidword_index_list, :].transpose())).asarray()
-        profiler_second += time() - time_flag_second
-        time_flag_third = time()
         for i in xrange(len(query_index_list)):
+            time_flag_total = time()
+            time_flag_first = time()
             length_before = len(bidword_index_list)
             
             range_list = [[], [], [], [], []]
-            for j in xrange(len(query_index_list)):
-                range_index = int((sim_matrix[i][j] + 0.4999) * 10 - 10)
-                if range_index < 0:
-                    continue
-                range_list[range_index].append((sim_matrix[i][j]), bidword_index_list[j])
-                
-            sorted_list = []
+            counter_list = [0] * 5
+            current_threshold = 0
             bidword_counter = 50
+            for j in xrange(len(bidword_index_list)):
+                if sim_matrix[i][j] < 0.5:
+                    continue
+                range_index = int((sim_matrix[i][j] + 0.4999) * 10 - 10)
+                if range_index < current_threshold:
+                    continue
+                range_list[range_index].append((sim_matrix[i][j], bidword_index_list[j]))
+                counter_list[range_index] += 1
+                if j % 1000 == 0:
+                    counter = 0
+                    for k in [4, 3, 2, 1]:
+                        counter += counter_list[k]
+                        if counter > bidword_counter:
+                            current_threshold = k
+                            break
+            profiler_first += time() - time_flag_first
+            time_flag_second = time()
+            sorted_list = []
             for j in [4, 3, 2, 1, 0]:
                 if bidword_counter <= 0:
                     break
-                if len[range_list[j]] < bidword_counter:
+                if len(range_list[j]) < bidword_counter:
                     sorted_list.extend(sorted(range_list[j], reverse = True))
                     bidword_counter -= len(range_list[j])
                 else:
                     sorted_list.extend(nlargest(bidword_counter, range_list[j]))
                     bidword_counter = 0
                     
+            profiler_second += time() - time_flag_second
+            time_flag_third = time()
+                    
             length_after = len(sorted_list)
             query_string = query_list[query_index_list[i]]
-            print "%s(%d/%d)\t" % (query_string, length_after, length_before),
+            print "%s(%d/%d/%d)\t" % (query_string, current_threshold, length_after, length_before),
             for sim_score, bidword_index in sorted_list:
                 if sim_score < 0.5:
                     break
                 print "%s(%f)" % (bidword_list[bidword_index], sim_score),
             print
-        profiler_third += time() - time_flag_third
-        profiler_total += time() - time_flag_total
+            profiler_third += time() - time_flag_third
+            profiler_total += time() - time_flag_total
         print "###profile###\ttotal=%f\tfirst=%f(%f)\tsecond=%f(%f)\tthird=%f(%f)" % (profiler_total,
                                                                                       profiler_first, profiler_first / profiler_total,
                                                                                       profiler_second, profiler_second / profiler_total,
