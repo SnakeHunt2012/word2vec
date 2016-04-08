@@ -165,7 +165,15 @@ def main():
     print "query counter", query_counter
     print "aggregating querh_hash_dict done", duration(start, end)
 
+    profiler_total = 0
+    profiler_first = 0
+    profiler_second = 0
+    profiler_third = 0
+
     for hash_string in query_hash_dict:
+        time_flag_total = time()
+        
+        time_flag_first = time()
         # aggregating query_index_set and bidword_index_set
         query_index_set = query_hash_dict[hash_string]
         bidword_index_set = set()
@@ -190,19 +198,23 @@ def main():
                 circum_hash_key = "".join(circum_hash_key)
                 if circum_hash_key in bidword_hash_dict_list[i]:
                     bidword_index_set |= bidword_hash_dict_list[i][circum_hash_key]
-            # circum hash with hamming distance 3
-            for first_index, second_index, third_index in combinations(range(hash_length), 3):
-                circum_hash_key = list(hash_key)
-                circum_hash_key[first_index] = '1' if hash_key[first_index] == '0' else '0'
-                circum_hash_key[second_index] = '1' if hash_key[second_index] == '0' else '0'
-                circum_hash_key[third_index] = '1' if hash_key[third_index] == '0' else '0'
-                circum_hash_key = "".join(circum_hash_key)
-                if circum_hash_key in bidword_hash_dict_list[i]:
-                    bidword_index_set |= bidword_hash_dict_list[i][circum_hash_key]
+            ## circum hash with hamming distance 3
+            #for first_index, second_index, third_index in combinations(range(hash_length), 3):
+            #    circum_hash_key = list(hash_key)
+            #    circum_hash_key[first_index] = '1' if hash_key[first_index] == '0' else '0'
+            #    circum_hash_key[second_index] = '1' if hash_key[second_index] == '0' else '0'
+            #    circum_hash_key[third_index] = '1' if hash_key[third_index] == '0' else '0'
+            #    circum_hash_key = "".join(circum_hash_key)
+            #    if circum_hash_key in bidword_hash_dict_list[i]:
+            #        bidword_index_set |= bidword_hash_dict_list[i][circum_hash_key]
+        profiler_first += time() - time_flag_first
+        time_flag_second = time()
         # computing sim between query_index_list and bidword_index_list
         query_index_list = list(query_index_set)
         bidword_index_list = list(bidword_index_set)
         sim_matrix = dot(CUDAMatrix(query_matrix[query_index_list, :]), CUDAMatrix(bidword_matrix[bidword_index_list, :].transpose())).asarray()
+        profiler_second += time() - time_flag_second
+        time_flag_third = time()
         for i in xrange(len(query_index_list)):
             sorted_list = zip(sim_matrix[i], bidword_index_list)
             length_before = len(sorted_list)
@@ -215,6 +227,12 @@ def main():
                     break
                 print "%s(%f)" % (bidword_list[bidword_index], sim_score),
             print
+        profiler_third += time() - time_flag_third
+        profiler_total += time() - time_flag_total
+        print "###profile###\ttotal=%f\tfirst=%f(%f)\tsecond=%f(%f)\tthird=%f(%f)\t" % (profiler_total,
+                                                                                        profiler_first, profiler_first / profiler_total,
+                                                                                        profiler_second, profiler_second / profiler_total,
+                                                                                        profiler_third, profiler_third / profiler_total)
     
 if __name__ == "__main__":
 
