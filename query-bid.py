@@ -172,7 +172,6 @@ def main():
 
     for hash_string in query_hash_dict:
         time_flag_total = time()
-        
         time_flag_first = time()
         # aggregating query_index_set and bidword_index_set
         query_index_set = query_hash_dict[hash_string]
@@ -216,9 +215,27 @@ def main():
         profiler_second += time() - time_flag_second
         time_flag_third = time()
         for i in xrange(len(query_index_list)):
-            sorted_list = zip(sim_matrix[i], bidword_index_list)
-            length_before = len(sorted_list)
-            sorted_list = nlargest(50, sorted_list)
+            length_before = len(bidword_index_list)
+            
+            range_list = [[], [], [], [], []]
+            for j in xrange(len(query_index_list)):
+                range_index = int((sim_matrix[i][j] + 0.4999) * 10 - 10)
+                if range_index < 0:
+                    continue
+                range_list[range_index].append((sim_matrix[i][j]), bidword_index_list[j])
+                
+            sorted_list = []
+            bidword_counter = 50
+            for j in [4, 3, 2, 1, 0]:
+                if bidword_counter <= 0:
+                    break
+                if len[range_list[j]] < bidword_counter:
+                    sorted_list.extend(sorted(range_list[j], reverse = True))
+                    bidword_counter -= len(range_list[j])
+                else:
+                    sorted_list.extend(nlargest(bidword_counter, range_list[j]))
+                    bidword_counter = 0
+                    
             length_after = len(sorted_list)
             query_string = query_list[query_index_list[i]]
             print "%s(%d/%d)\t" % (query_string, length_after, length_before),
@@ -229,10 +246,10 @@ def main():
             print
         profiler_third += time() - time_flag_third
         profiler_total += time() - time_flag_total
-        print "###profile###\ttotal=%f\tfirst=%f(%f)\tsecond=%f(%f)\tthird=%f(%f)\t" % (profiler_total,
-                                                                                        profiler_first, profiler_first / profiler_total,
-                                                                                        profiler_second, profiler_second / profiler_total,
-                                                                                        profiler_third, profiler_third / profiler_total)
+        print "###profile###\ttotal=%f\tfirst=%f(%f)\tsecond=%f(%f)\tthird=%f(%f)" % (profiler_total,
+                                                                                      profiler_first, profiler_first / profiler_total,
+                                                                                      profiler_second, profiler_second / profiler_total,
+                                                                                      profiler_third, profiler_third / profiler_total)
     
 if __name__ == "__main__":
 
