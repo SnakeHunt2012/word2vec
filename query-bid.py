@@ -115,13 +115,15 @@ def main():
     end = time()
     print "initing cublas done", duration(start, end)
 
-    print "computing hash_matrix (bidword) ..."
+    print "computing hash_matrix ..."
     start = time()
     cuda_seed_matrix = CUDAMatrix(seed_matrix)
     cuda_bidword_matrix = CUDAMatrix(bidword_matrix)
+    cuda_query_matrix = CUDAMatrix(query_matrix)
     bidword_hash_matrix = dot(cuda_bidword_matrix, cuda_seed_matrix).asarray()
+    query_hash_matrix = dot(cuda_query_matrix, cuda_seed_matrix).asarray()
     end = time()
-    print "computing hash_matrix (bidword) done", duration(start, end)
+    print "computing hash_matrix done", duration(start, end)
 
     print "initing hash_dict_list ..."
     start = time()
@@ -146,13 +148,6 @@ def main():
 
     #del cuda_bidword_matrix
     
-    print "computing hash_matrix (query) ..."
-    start = time()
-    cuda_query_matrix = CUDAMatrix(query_matrix)
-    query_hash_matrix = dot(cuda_query_matrix, cuda_seed_matrix).asarray()
-    end = time()
-    print "computing hash_matrix (query) done", duration(start, end)
-
     profiler_one = 0
     profiler_two = 0
     profiler_three = 0
@@ -161,7 +156,6 @@ def main():
     query_matrix = matrix(query_matrix)
     bidword_matrix = matrix(bidword_matrix)
     for i in xrange(len(query_list)):
-        
         time_flag_total = time()
         hash_string = "".join(['1' if j > 0 else '0' for j in query_hash_matrix[i, :]])
         candidate_index_set = set([])
@@ -199,9 +193,10 @@ def main():
         profiler_one += time() - time_flag_one
         time_flag_two = time()
         candidate_index_list = list(candidate_index_set)
-        source_matrix = query_matrix[i, :]
-        target_matrix = bidword_matrix[candidate_index_list, :].transpose()
-        sim_list = np.dot(source_matrix, target_matrix)[0, :].tolist()[0]
+        #source_matrix = query_matrix[i, :]
+        #target_matrix = bidword_matrix[candidate_index_list, :].transpose()
+        #sim_list = np.dot(query_matrix[i, :], bidword_matrix[candidate_index_list, :].transpose())[0, :].tolist()[0]
+        sim_list = dot(CUDAMatrix(np.array(query_matrix[i, :])), CUDAMatrix(np.array(bidword_matrix[candidate_index_list, :].transpose()))).asarray()[0, :].tolist()
         profiler_two += time() - time_flag_two
         time_flag_three = time()
         range_list = [[], [], [], [], []]
