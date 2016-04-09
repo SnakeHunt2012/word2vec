@@ -212,29 +212,15 @@ def main():
             time_flag_total = time()
             time_flag_first = time()
             length_before = len(bidword_index_list)
-            
             range_list = [[], [], [], [], []]
-            counter_list = [0] * 5
-            current_threshold = 0
-            bidword_counter = 50
             for j in xrange(len(bidword_index_list)):
-                if sim_matrix[i][j] < 0.5:
-                    continue
-                range_index = int((sim_matrix[i][j] + 0.4999) * 10 - 10)
-                if range_index < current_threshold:
-                    continue
-                range_list[range_index].append((sim_matrix[i][j], bidword_index_list[j]))
-                counter_list[range_index] += 1
-                if j % 1000 == 0:
-                    counter = 0
-                    for k in [4, 3, 2, 1]:
-                        counter += counter_list[k]
-                        if counter > bidword_counter:
-                            current_threshold = k
-                            break
+                sim_score = sim_matrix[i][j]
+                if sim_score > 0.5:
+                    range_list[int((sim_score + 0.4999) * 10 - 10)].append((sim_score, bidword_index_list[j]))
             profiler_first += time() - time_flag_first
             time_flag_second = time()
             sorted_list = []
+            bidword_counter = 50
             for j in [4, 3, 2, 1, 0]:
                 if bidword_counter <= 0:
                     break
@@ -250,7 +236,7 @@ def main():
                     
             length_after = len(sorted_list)
             query_string = query_list[query_index_list[i]]
-            print "%s(%d/%d/%d)\t" % (query_string, current_threshold, length_after, length_before),
+            print "%s(%d/%d)\t" % (query_string, length_after, length_before),
             for sim_score, bidword_index in sorted_list:
                 if sim_score < 0.5:
                     break
