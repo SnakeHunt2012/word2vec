@@ -3,12 +3,15 @@
 
 from time import time
 from codecs import open
+from array import array as py_array
 from numpy import array, matrix
 from numpy.random import random
 from argparse import ArgumentParser
 from cudamat import cublas_init, CUDAMatrix, dot
 from itertools import combinations
 from heapq import nlargest
+
+from custom_zip import custom_zip
 
 import numpy as np
 
@@ -91,30 +94,30 @@ def main():
     query_file = args.query_file
     bidword_file = args.bidword_file
 
-    print "loading bidword dict ..."
+    #print "loading bidword dict ..."
     start = time()
     bidword_list, bidword_matrix = load_normalized_matrix(bidword_file)
     end = time()
-    print "loading bidword dict done", duration(start, end)
+    #print "loading bidword dict done", duration(start, end)
     
-    print "loading query dict ..."
+    #print "loading query dict ..."
     start = time()
     query_list, query_matrix = load_normalized_matrix(query_file)
     end = time()
-    print "loading query dict done", duration(start, end)
+    #print "loading query dict done", duration(start, end)
 
     hash_length = 15
     hash_number = 1
 
     seed_matrix = random((200, hash_length * hash_number)) - 0.5
 
-    print "initing cublas ..."
+    #print "initing cublas ..."
     start = time()
     cublas_init(1000000)
     end = time()
-    print "initing cublas done", duration(start, end)
+    #print "initing cublas done", duration(start, end)
 
-    print "computing hash_matrix ..."
+    #print "computing hash_matrix ..."
     start = time()
     cuda_seed_matrix = CUDAMatrix(seed_matrix)
     cuda_bidword_matrix = CUDAMatrix(bidword_matrix)
@@ -122,18 +125,18 @@ def main():
     bidword_hash_matrix = dot(cuda_bidword_matrix, cuda_seed_matrix).asarray()
     query_hash_matrix = dot(cuda_query_matrix, cuda_seed_matrix).asarray()
     end = time()
-    print "computing hash_matrix done", duration(start, end)
+    #print "computing hash_matrix done", duration(start, end)
 
     del cuda_bidword_matrix
     del cuda_query_matrix
     
-    print "initing bidword_hash_dict_list ..."
+    #print "initing bidword_hash_dict_list ..."
     start = time()
     bidword_hash_dict_list = [dict([]) for i in xrange(hash_number)]
     end = time()
-    print "initing bidword_hash_dict_list done", duration(start, end)
+    #print "initing bidword_hash_dict_list done", duration(start, end)
     
-    print "aggregating bidword_hash_dict_list ..."
+    #print "aggregating bidword_hash_dict_list ..."
     start = time()
     for i in xrange(bidword_hash_matrix.shape[0]):
         hash_string = "".join(['1' if j > 0 else '0' for j in bidword_hash_matrix[i, :]])
@@ -146,9 +149,9 @@ def main():
             else:
                 bidword_hash_dict_list[j][hash_key] = set([i])
     end = time()
-    print "aggregating bidword_hash_dict_list done", duration(start, end)
+    #print "aggregating bidword_hash_dict_list done", duration(start, end)
 
-    print "aggregating query_hash_dict ..."
+    #print "aggregating query_hash_dict ..."
     start = time()
     query_hash_dict = {}
     for i in xrange(query_hash_matrix.shape[0]):
@@ -162,15 +165,18 @@ def main():
     query_counter = 0
     for hash_key in query_hash_dict:
         query_counter += len(query_hash_dict[hash_key])
-    print "query counter", query_counter
-    print "aggregating querh_hash_dict done", duration(start, end)
+    #print "query counter", query_counter
+    #print "aggregating querh_hash_dict done", duration(start, end)
 
     profiler_total = 0
     profiler_first = 0
     profiler_second = 0
     profiler_third = 0
+    timer = time()
 
     for hash_string in query_hash_dict:
+        time_flag_total = time()
+        time_flag_first = time()
         # aggregating query_index_set and bidword_index_set
         query_index_set = query_hash_dict[hash_string]
         bidword_index_set = set()
@@ -205,49 +211,41 @@ def main():
             #    if circum_hash_key in bidword_hash_dict_list[i]:
             #        bidword_index_set |= bidword_hash_dict_list[i][circum_hash_key]
         # computing sim between query_index_list and bidword_index_list
+        profiler_first += time() - time_flag_first
+        time_flag_second = time()
         query_index_list = list(query_index_set)
         bidword_index_list = list(bidword_index_set)
-        sim_matrix = dot(CUDAMatrix(query_matrix[query_index_list, :]), CUDAMatrix(bidword_matrix[bidword_index_list, :].transpose())).asarray()
+        sim_matrix = dot(CUDAMatrix(query_matrix[query_index_list, :]), CUDAMatrix(bidword_matrix[bidword_index_list, :].transpose())).asarray().tolist()
+        profiler_second += time() - time_flag_second
+        time_flag_third = time()
         for i in xrange(len(query_index_list)):
-            time_flag_total = time()
-            time_flag_first = time()
             length_before = len(bidword_index_list)
-            range_list = [[], [], [], [], []]
-            for j in xrange(len(bidword_index_list)):
-                sim_score = sim_matrix[i][j]
-                if sim_score > 0.5:
-                    range_list[int((sim_score + 0.4999) * 10 - 10)].append((sim_score, bidword_index_list[j]))
-            profiler_first += time() - time_flag_first
-            time_flag_second = time()
-            sorted_list = []
-            bidword_counter = 50
-            for j in [4, 3, 2, 1, 0]:
-                if bidword_counter <= 0:
-                    break
-                if len(range_list[j]) < bidword_counter:
-                    sorted_list.extend(sorted(range_list[j], reverse = True))
-                    bidword_counter -= len(range_list[j])
-                else:
-                    sorted_list.extend(nlargest(bidword_counter, range_list[j]))
-                    bidword_counter = 0
-                    
-            profiler_second += time() - time_flag_second
-            time_flag_third = time()
-                    
+            sim_matrix_row = sim_matrix[i]
+            bidword_index_length = len(bidword_index_list)
+            sorted_list = [(sim_matrix_row[j], bidword_index_list[j]) for j in xrange(bidword_index_length) if sim_matrix_row[j] > 0.5]
             length_after = len(sorted_list)
+            sorted_list = nlargest(50, sorted_list)
             query_string = query_list[query_index_list[i]]
-            print "%s(%d/%d)\t" % (query_string, length_after, length_before),
+            #print "%s(%d/%d)\t" % (query_string, length_after, length_before),
+            #for sim_score, bidword_index in sorted_list:
+            #    if sim_score < 0.5:
+            #        break
+            #    print "%s(%f)" % (bidword_list[bidword_index], sim_score),
+            #print
+            #print "%s(%d/%d)\t" % (query_string, length_after, length_before),
+            print "%s\t" % (query_string),
             for sim_score, bidword_index in sorted_list:
                 if sim_score < 0.5:
                     break
-                print "%s(%f)" % (bidword_list[bidword_index], sim_score),
+                print "%s;" % (bidword_list[bidword_index]),
             print
-            profiler_third += time() - time_flag_third
-            profiler_total += time() - time_flag_total
-        print "###profile###\ttotal=%f\tfirst=%f(%f)\tsecond=%f(%f)\tthird=%f(%f)" % (profiler_total,
-                                                                                      profiler_first, profiler_first / profiler_total,
-                                                                                      profiler_second, profiler_second / profiler_total,
-                                                                                      profiler_third, profiler_third / profiler_total)
+        profiler_third += time() - time_flag_third
+        profiler_total += time() - time_flag_total
+        #print "###profile###\ttotal=%f\tfirst=%f(%f)\tsecond=%f(%f)\tthird=%f(%f)\t%s(%f)" % (profiler_total,
+        #                                                                                      profiler_first, profiler_first / profiler_total,
+        #                                                                                      profiler_second, profiler_second / profiler_total,
+        #                                                                                      profiler_third, profiler_third / profiler_total,
+        #                                                                                      duration(timer, time()), time() - timer)
     
 if __name__ == "__main__":
 
