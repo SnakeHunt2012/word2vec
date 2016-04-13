@@ -220,7 +220,7 @@ def main():
         
         # under construction
         sim_matrix = None
-        print "Matrix shape:", query_matrix[query_index_list, :].shape, bidword_matrix[bidword_index_list, :].transpose().shape, len(query_index_list) * len(bidword_index_list)
+        #print "Matrix shape:", query_matrix[query_index_list, :].shape, bidword_matrix[bidword_index_list, :].transpose().shape, len(query_index_list) * len(bidword_index_list)
         if len(query_index_list) * len(bidword_index_list) > 1e8:
             sim_matrix = []
             step = int(1e8 / len(bidword_index_list))
@@ -228,7 +228,7 @@ def main():
             partition_end = 0
             while partition_end < len(query_index_list):
                 partition_end = len(query_index_list) if partition_begin + step > len(query_index_list) else partition_begin + step
-                print "partition_begin:", partition_begin, "partition_end:", partition_end, "type(partition_begin):", type(partition_begin), "type(partition_end):", type(partition_end)
+                #print "partition_begin:", partition_begin, "partition_end:", partition_end, "type(partition_begin):", type(partition_begin), "type(partition_end):", type(partition_end)
                 sim_matrix.extend(
                     dot(
                         CUDAMatrix(query_matrix[query_index_list[partition_begin:partition_end], :]),
@@ -236,10 +236,10 @@ def main():
                     ).asarray().tolist()
                 )
                 partition_begin = partition_end
-            print "After Partition len(sim_matrix):", len(sim_matrix)
+            #print "After Partition len(sim_matrix):", len(sim_matrix)
         else:
             sim_matrix = dot(CUDAMatrix(query_matrix[query_index_list, :]), CUDAMatrix(bidword_matrix[bidword_index_list, :].transpose())).asarray().tolist()
-            print "Not Partition len(sim_matrix):", len(sim_matrix)
+            #print "Not Partition len(sim_matrix):", len(sim_matrix)
             
         profiler_second += time() - time_flag_second
         time_flag_third = time()
@@ -250,26 +250,25 @@ def main():
             sorted_list = nlargest(100, ((sim_matrix_row[j], bidword_index_list[j]) for j in xrange(bidword_index_length) if sim_matrix_row[j] > 0.5))
             length_after = len(sorted_list)
             query_string = query_list[query_index_list[i]]
-            print "%s(%d/%d)\t" % (query_string, length_after, length_before),
-            for sim_score, bidword_index in sorted_list:
-                if sim_score < 0.5:
-                    break
-                print "%s(%f)" % (bidword_list[bidword_index], sim_score),
-            print
             #print "%s(%d/%d)\t" % (query_string, length_after, length_before),
-            #print "%s\t" % (query_string),
             #for sim_score, bidword_index in sorted_list:
             #    if sim_score < 0.5:
             #        break
-            #    print "%s;" % (bidword_list[bidword_index]),
+            #    print "%s(%f)" % (bidword_list[bidword_index], sim_score),
             #print
+            print "%s\t" % (query_string),
+            for sim_score, bidword_index in sorted_list:
+                if sim_score < 0.5:
+                    break
+                print "%s;" % (bidword_list[bidword_index]),
+            print
         profiler_third += time() - time_flag_third
         profiler_total += time() - time_flag_total
-        print "###profile###\ttotal=%f\tfirst=%f(%f)\tsecond=%f(%f)\tthird=%f(%f)\t%s(%f)" % (profiler_total,
-                                                                                              profiler_first, profiler_first / profiler_total,
-                                                                                              profiler_second, profiler_second / profiler_total,
-                                                                                              profiler_third, profiler_third / profiler_total,
-                                                                                              duration(timer, time()), time() - timer)
+        #print "###profile###\ttotal=%f\tfirst=%f(%f)\tsecond=%f(%f)\tthird=%f(%f)\t%s(%f)" % (profiler_total,
+        #                                                                                      profiler_first, profiler_first / profiler_total,
+        #                                                                                      profiler_second, profiler_second / profiler_total,
+        #                                                                                      profiler_third, profiler_third / profiler_total,
+        #                                                                                      duration(timer, time()), time() - timer)
     
 if __name__ == "__main__":
 
