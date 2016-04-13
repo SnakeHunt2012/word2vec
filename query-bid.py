@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from gc import collect
 from time import time
 from codecs import open
 from numpy import array, matrix
-from numpy.random import random
+from numpy.random import random, random_sample
 from argparse import ArgumentParser
 from cudamat import cublas_init, CUDAMatrix, dot
 from itertools import combinations
@@ -176,6 +177,9 @@ def main():
     for hash_string in query_hash_dict:
         time_flag_total = time()
         time_flag_first = time()
+        # random release memory
+        if random_sample() > 0.95:
+            collect()
         # aggregating query_index_set and bidword_index_set
         query_index_set = query_hash_dict[hash_string]
         bidword_index_set = set()
@@ -218,7 +222,7 @@ def main():
         #print "Matrix shape:", query_matrix[query_index_list, :].shape, bidword_matrix[bidword_index_list, :].transpose().shape, len(query_index_list) * len(bidword_index_list)
         #sim_matrix = dot(CUDAMatrix(query_matrix[query_index_list, :]), CUDAMatrix(bidword_matrix[bidword_index_list, :].transpose())).asarray().tolist()
         
-        # under construction
+        # finished construction
         sim_matrix = None
         #print "Matrix shape:", query_matrix[query_index_list, :].shape, bidword_matrix[bidword_index_list, :].transpose().shape, len(query_index_list) * len(bidword_index_list)
         if len(query_index_list) * len(bidword_index_list) > 1e8:
