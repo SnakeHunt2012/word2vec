@@ -13,7 +13,7 @@ from heapq import nlargest
 
 import numpy as np
 
-DEBUG_FLAG = True
+DEBUG_FLAG = False
 
 def duration(start, end):
 
@@ -254,32 +254,24 @@ def main():
         
         query_index_list = list(query_index_set)
         bidword_index_list = list(bidword_index_set)
-        #print "Matrix shape:", query_matrix[query_index_list, :].shape, bidword_matrix[bidword_index_list, :].transpose().shape, len(query_index_list) * len(bidword_index_list)
-        if len(query_index_list) * len(bidword_index_list) > 1e8:
+        print "Matrix shape:", query_matrix[query_index_list, :].shape, bidword_matrix[bidword_index_list, :].transpose().shape, len(query_index_list) * len(bidword_index_list)
+        if len(bidword_index_list) > 1e8:
+            raise Exception("bidword_index_list too long: %d" % len(query_index_list))
+        
+        step = int(1e8 / len(bidword_index_list))
+        partition_begin = 0
+        partition_end = 0
+        while partition_end < len(query_index_list):
+            partition_end = len(query_index_list) if partition_begin + step > len(query_index_list) else partition_begin + step
+            print "partition_begin:", partition_begin, "partition_end:", partition_end, "type(partition_begin):", type(partition_begin), "type(partition_end):", type(partition_end)
             time_flag_second = time()
-            sim_matrix = []
-            step = int(1e8 / len(bidword_index_list))
-            partition_begin = 0
-            partition_end = 0
-            while partition_end < len(query_index_list):
-                partition_end = len(query_index_list) if partition_begin + step > len(query_index_list) else partition_begin + step
-                #print "partition_begin:", partition_begin, "partition_end:", partition_end, "type(partition_begin):", type(partition_begin), "type(partition_end):", type(partition_end)
-                sim_matrix.extend(
-                    dot(
-                        CUDAMatrix(query_matrix[query_index_list[partition_begin:partition_end], :]),
-                        CUDAMatrix(bidword_matrix[bidword_index_list, :].transpose())
-                    ).asarray().tolist()
-                )
-                partition_begin = partition_end
-            #print "After Partition len(sim_matrix):", len(sim_matrix)
+            sim_matrix = dot(
+                CUDAMatrix(query_matrix[query_index_list[partition_begin:partition_end], :]),
+                CUDAMatrix(bidword_matrix[bidword_index_list, :].transpose())
+            ).asarray().tolist()
             profiler_second += time() - time_flag_second
-            profiler_third += sort_matrix(sim_matrix, query_list, query_index_list, bidword_list, bidword_index_list)
-        else:
-            time_flag_second = time()
-            sim_matrix = dot(CUDAMatrix(query_matrix[query_index_list, :]), CUDAMatrix(bidword_matrix[bidword_index_list, :].transpose())).asarray().tolist()
-            profiler_second += time() - time_flag_second
-            #print "Not Partition len(sim_matrix):", len(sim_matrix)
-            profiler_third += sort_matrix(sim_matrix, query_list, query_index_list, bidword_list, bidword_index_list)
+            profiler_third += sort_matrix(sim_matrix, query_list, query_index_list[partition_begin:partition_end], bidword_list, bidword_index_list)
+            partition_begin = partition_end
             
         profiler_total += time() - time_flag_total
         if DEBUG_FLAG:
