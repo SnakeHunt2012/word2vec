@@ -4,16 +4,16 @@
 from gc import collect
 from time import time
 from codecs import open
-from numpy import array, matrix
+from numpy import array
 from numpy.random import random, random_sample
 from argparse import ArgumentParser
 from cudamat import cublas_init, CUDAMatrix, dot
 from itertools import combinations
 from heapq import nlargest
 
-from custom_zip import custom_zip
-
 import numpy as np
+
+DEBUG_FLAG = True
 
 def duration(start, end):
 
@@ -84,6 +84,33 @@ def load_normalized_matrix(tsv_file):
     assert len(vec_dict) == len(vec_list)
     return phrase_list, array(vec_list, dtype = "float32")
 
+def sort_matrix(sim_matrix, query_list, query_index_list, bidword_list, bidword_index_list):
+
+    time_flag = time()
+    for i in xrange(len(query_index_list)):
+        length_before = len(bidword_index_list)
+        sim_matrix_row = sim_matrix[i]
+        bidword_index_length = len(bidword_index_list)
+        sorted_list = nlargest(100, ((sim_matrix_row[j], bidword_index_list[j]) for j in xrange(bidword_index_length) if sim_matrix_row[j] > 0.5))
+        length_after = len(sorted_list)
+        query_string = query_list[query_index_list[i]]
+
+        if DEBUG_FLAG:
+            print "%s(%d/%d)\t" % (query_string, length_after, length_before),
+            for sim_score, bidword_index in sorted_list:
+                if sim_score < 0.5:
+                    break
+                print "%s(%f)" % (bidword_list[bidword_index], sim_score),
+            print
+        else:
+            print "%s\t" % (query_string),
+            for sim_score, bidword_index in sorted_list:
+                if sim_score < 0.5:
+                    break
+                print "%s;" % (bidword_list[bidword_index]),
+            print
+    return time() - time_flag
+
 def main():
 
     parser = ArgumentParser()
@@ -94,30 +121,37 @@ def main():
     query_file = args.query_file
     bidword_file = args.bidword_file
 
-    #print "loading bidword dict ..."
+    if DEBUG_FLAG:
+        print "loading bidword dict ..."
     start = time()
     bidword_list, bidword_matrix = load_normalized_matrix(bidword_file)
     end = time()
-    #print "loading bidword dict done", duration(start, end)
+    if DEBUG_FLAG:
+        print "loading bidword dict done", duration(start, end)
     
-    #print "loading query dict ..."
+    if DEBUG_FLAG:
+        print "loading query dict ..."
     start = time()
     query_list, query_matrix = load_normalized_matrix(query_file)
     end = time()
-    #print "loading query dict done", duration(start, end)
+    if DEBUG_FLAG:
+        print "loading query dict done", duration(start, end)
 
     hash_length = 13
     hash_number = 1
 
     seed_matrix = random((200, hash_length * hash_number)) - 0.5
 
-    #print "initing cublas ..."
+    if DEBUG_FLAG:
+        print "initing cublas ..."
     start = time()
     cublas_init(1000000)
     end = time()
-    #print "initing cublas done", duration(start, end)
+    if DEBUG_FLAG:
+        print "initing cublas done", duration(start, end)
 
-    #print "computing hash_matrix ..."
+    if DEBUG_FLAG:
+        print "computing hash_matrix ..."
     start = time()
     cuda_seed_matrix = CUDAMatrix(seed_matrix)
     cuda_bidword_matrix = CUDAMatrix(bidword_matrix)
@@ -125,18 +159,22 @@ def main():
     bidword_hash_matrix = dot(cuda_bidword_matrix, cuda_seed_matrix).asarray()
     query_hash_matrix = dot(cuda_query_matrix, cuda_seed_matrix).asarray()
     end = time()
-    #print "computing hash_matrix done", duration(start, end)
+    if DEBUG_FLAG:
+        print "computing hash_matrix done", duration(start, end)
 
     del cuda_bidword_matrix
     del cuda_query_matrix
     
-    #print "initing bidword_hash_dict_list ..."
+    if DEBUG_FLAG:
+        print "initing bidword_hash_dict_list ..."
     start = time()
     bidword_hash_dict_list = [dict([]) for i in xrange(hash_number)]
     end = time()
-    #print "initing bidword_hash_dict_list done", duration(start, end)
+    if DEBUG_FLAG:
+        print "initing bidword_hash_dict_list done", duration(start, end)
     
-    #print "aggregating bidword_hash_dict_list ..."
+    if DEBUG_FLAG:
+        print "aggregating bidword_hash_dict_list ..."
     start = time()
     for i in xrange(bidword_hash_matrix.shape[0]):
         hash_string = "".join(['1' if j > 0 else '0' for j in bidword_hash_matrix[i, :]])
@@ -149,9 +187,11 @@ def main():
             else:
                 bidword_hash_dict_list[j][hash_key] = set([i])
     end = time()
-    #print "aggregating bidword_hash_dict_list done", duration(start, end)
+    if DEBUG_FLAG:
+        print "aggregating bidword_hash_dict_list done", duration(start, end)
 
-    #print "aggregating query_hash_dict ..."
+    if DEBUG_FLAG:
+        print "aggregating query_hash_dict ..."
     start = time()
     query_hash_dict = {}
     for i in xrange(query_hash_matrix.shape[0]):
@@ -161,12 +201,8 @@ def main():
         else:
             query_hash_dict[hash_string] = set([i])
     end = time()
-    # debug
-    query_counter = 0
-    for hash_key in query_hash_dict:
-        query_counter += len(query_hash_dict[hash_key])
-    #print "query counter", query_counter
-    #print "aggregating querh_hash_dict done", duration(start, end)
+    if DEBUG_FLAG:
+        print "aggregating querh_hash_dict done", duration(start, end)
 
     profiler_total = 0
     profiler_first = 0
@@ -215,17 +251,12 @@ def main():
             #        bidword_index_set |= bidword_hash_dict_list[i][circum_hash_key]
         # computing sim between query_index_list and bidword_index_list
         profiler_first += time() - time_flag_first
-        time_flag_second = time()
+        
         query_index_list = list(query_index_set)
         bidword_index_list = list(bidword_index_set)
-
-        #print "Matrix shape:", query_matrix[query_index_list, :].shape, bidword_matrix[bidword_index_list, :].transpose().shape, len(query_index_list) * len(bidword_index_list)
-        #sim_matrix = dot(CUDAMatrix(query_matrix[query_index_list, :]), CUDAMatrix(bidword_matrix[bidword_index_list, :].transpose())).asarray().tolist()
-        
-        # finished construction
-        sim_matrix = None
         #print "Matrix shape:", query_matrix[query_index_list, :].shape, bidword_matrix[bidword_index_list, :].transpose().shape, len(query_index_list) * len(bidword_index_list)
         if len(query_index_list) * len(bidword_index_list) > 1e8:
+            time_flag_second = time()
             sim_matrix = []
             step = int(1e8 / len(bidword_index_list))
             partition_begin = 0
@@ -241,38 +272,22 @@ def main():
                 )
                 partition_begin = partition_end
             #print "After Partition len(sim_matrix):", len(sim_matrix)
+            profiler_second += time() - time_flag_second
+            profiler_third += sort_matrix(sim_matrix, query_list, query_index_list, bidword_list, bidword_index_list)
         else:
+            time_flag_second = time()
             sim_matrix = dot(CUDAMatrix(query_matrix[query_index_list, :]), CUDAMatrix(bidword_matrix[bidword_index_list, :].transpose())).asarray().tolist()
+            profiler_second += time() - time_flag_second
             #print "Not Partition len(sim_matrix):", len(sim_matrix)
+            profiler_third += sort_matrix(sim_matrix, query_list, query_index_list, bidword_list, bidword_index_list)
             
-        profiler_second += time() - time_flag_second
-        time_flag_third = time()
-        for i in xrange(len(query_index_list)):
-            length_before = len(bidword_index_list)
-            sim_matrix_row = sim_matrix[i]
-            bidword_index_length = len(bidword_index_list)
-            sorted_list = nlargest(100, ((sim_matrix_row[j], bidword_index_list[j]) for j in xrange(bidword_index_length) if sim_matrix_row[j] > 0.5))
-            length_after = len(sorted_list)
-            query_string = query_list[query_index_list[i]]
-            #print "%s(%d/%d)\t" % (query_string, length_after, length_before),
-            #for sim_score, bidword_index in sorted_list:
-            #    if sim_score < 0.5:
-            #        break
-            #    print "%s(%f)" % (bidword_list[bidword_index], sim_score),
-            #print
-            print "%s\t" % (query_string),
-            for sim_score, bidword_index in sorted_list:
-                if sim_score < 0.5:
-                    break
-                print "%s;" % (bidword_list[bidword_index]),
-            print
-        profiler_third += time() - time_flag_third
         profiler_total += time() - time_flag_total
-        #print "###profile###\ttotal=%f\tfirst=%f(%f)\tsecond=%f(%f)\tthird=%f(%f)\t%s(%f)" % (profiler_total,
-        #                                                                                      profiler_first, profiler_first / profiler_total,
-        #                                                                                      profiler_second, profiler_second / profiler_total,
-        #                                                                                      profiler_third, profiler_third / profiler_total,
-        #                                                                                      duration(timer, time()), time() - timer)
+        if DEBUG_FLAG:
+            print "###profile###\ttotal=%f\tfirst=%f(%f)\tsecond=%f(%f)\tthird=%f(%f)\t%s(%f)" % (profiler_total,
+                                                                                                  profiler_first, profiler_first / profiler_total,
+                                                                                                  profiler_second, profiler_second / profiler_total,
+                                                                                                  profiler_third, profiler_third / profiler_total,
+                                                                                                  duration(timer, time()), time() - timer)
     
 if __name__ == "__main__":
 
