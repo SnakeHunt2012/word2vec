@@ -254,7 +254,8 @@ def main():
         
         query_index_list = list(query_index_set)
         bidword_index_list = list(bidword_index_set)
-        print "Matrix shape:", query_matrix[query_index_list, :].shape, bidword_matrix[bidword_index_list, :].transpose().shape, len(query_index_list) * len(bidword_index_list)
+        if DEBUG_FLAG:
+            print "Matrix shape:", query_matrix[query_index_list, :].shape, bidword_matrix[bidword_index_list, :].transpose().shape, len(query_index_list) * len(bidword_index_list)
         if len(bidword_index_list) > 1e8:
             raise Exception("bidword_index_list too long: %d" % len(query_index_list))
         
@@ -263,7 +264,8 @@ def main():
         partition_end = 0
         while partition_end < len(query_index_list):
             partition_end = len(query_index_list) if partition_begin + step > len(query_index_list) else partition_begin + step
-            print "partition_begin:", partition_begin, "partition_end:", partition_end, "type(partition_begin):", type(partition_begin), "type(partition_end):", type(partition_end)
+            if DEBUG_FLAG:
+                print "partition_begin:", partition_begin, "partition_end:", partition_end, "type(partition_begin):", type(partition_begin), "type(partition_end):", type(partition_end)
             time_flag_second = time()
             sim_matrix = dot(
                 CUDAMatrix(query_matrix[query_index_list[partition_begin:partition_end], :]),
