@@ -16,56 +16,22 @@ def duration(start, end):
 
 def load_dict(tsv_file):
 
-    school_set = set()
+    school_dict = {}
     with open(tsv_file, 'r') as fd:
         for row in fd:
             splited_row = row.strip().split()
-            assert len(splited_row) == 1
-            school = splited_row.pop(0)
-            school_set.add(school)
-    synonymy_map = dict((school, school) for school in school_set)
-
-    assert "中国地质大学（北京）" in synonymy_map
-    assert "大连理工大学" in synonymy_map
-    assert "复旦大学" in synonymy_map
-    assert "中南财经政法大学" in synonymy_map
-    assert "华中科技大学" in synonymy_map
-    assert "" in synonymy_map
-    assert "" in synonymy_map
-    assert "" in synonymy_map
-    assert "" in synonymy_map
-    assert "" in synonymy_map
-    assert "" in synonymy_map
-    assert "" in synonymy_map
-    assert "" in synonymy_map
-    assert "" in synonymy_map
-    assert "" in synonymy_map
+            assert len(splited_row) > 0
+            school_dict[splited_row[0]] = set(splited_row[1:])
+    school_set = set(school_dict)
     
-    synonymy_map["中国地质大学"] = "中国地质大学（北京）"
-    synonymy_map["大连理工"] = "大连理工大学"
-    synonymy_map["上海复旦大学"] = "复旦大学"
-    synonymy_map["复旦"] = "复旦大学"
-    synonymy_map["中南财经"] = "中南财经政法大学"
-    synonymy_map["中南财经大学"] = "中南财经政法大学"
-    synonymy_map["华中理工大学"] = "华中科技大学"
-    synonymy_map["华中科大"] = "华中科技大学"
-    synonymy_map["华中理工"] = "华中科技大学"
-    synonymy_map["华中科技"] = "华中科技大学"
-    synonymy_map["华中科"] = "华中科技大学"
-    synonymy_map["华中大"] = "华中科技大学"
-    synonymy_map["华科大"] = "华中科技大学"
-    synonymy_map["华科"] = "华中科技大学"
-    synonymy_map["华中科技"] = "华中科技大学"
-    synonymy_map[""] = ""
-    synonymy_map[""] = ""
-    synonymy_map[""] = ""
-    synonymy_map[""] = ""
-    synonymy_map[""] = ""
-    synonymy_map[""] = ""
-    synonymy_map[""] = ""
-    synonymy_map[""] = ""
-    synonymy_map[""] = ""
-    synonymy_map[""] = ""
+    synonymy_map = {}
+    for school in school_set:
+        synonymy_map[school] = school
+        for syn_school in school_dict[school]:
+            if syn_school in synonymy_map:
+                #raise Exception("%s already in synonymy_map[%s] = %s not %s" % (syn_school, syn_school, synonymy_map[syn_school], school))
+                continue
+            synonymy_map[syn_school] = school
     return school_set, synonymy_map
 
 def judge_relation(query_school_set, bidword_school_set, synonymy_map):
@@ -83,7 +49,7 @@ def judge_relation(query_school_set, bidword_school_set, synonymy_map):
 def main():
 
     parser = ArgumentParser()
-    parser.add_argument("tsv_file", help = "china school file in tsv format")
+    parser.add_argument("tsv_file", help = "china school file with its synonymy in tsv format")
     parser.add_argument("sim_file", help = "query to bid sim file in tsv format")
     args = parser.parse_args()
 
