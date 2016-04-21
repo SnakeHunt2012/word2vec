@@ -7,27 +7,30 @@ from codecs import open
 from numpy import array, matrix
 from numpy.random import random
 from argparse import ArgumentParser
-from itertools import combinations
+from itertools import combinations, product
 from heapq import nlargest
 from pandas import read_csv
 
-nationality_tuple = (
+nationality_list = [
     "壮族", "藏族", "裕固族", "彝族", "瑶族", "锡伯族", "乌孜别克族", "维吾尔族", "佤族", "土家族",
     "土族", "塔塔尔族", "塔吉克族", "水族", "畲族", "撒拉族", "羌族", "普米族", "怒族", "纳西族",
     "仫佬族", "苗族", "蒙古族", "门巴族", "毛南族", "满族", "珞巴族", "僳僳族", "黎族", "拉祜族",
     "柯尔克孜族", "景颇族", "京族", "基诺族", "回族", "赫哲族", "哈萨克族", "哈尼族", "仡佬族",
     "高山族", "鄂温克族", "俄罗斯族", "鄂伦春族", "独龙族", "东乡族", "侗族", "德昂族", "傣族",
-    "达斡尔族", "朝鲜族", "布依族", "布朗族", "保安族", "白族", "阿昌族", "汉族"
-)
+    "达斡尔族", "朝鲜族", "布依族", "布朗族", "保安族", "白族", "阿昌族", "傈僳族", "汉族", "各族"
+]
+nationality_list.sort(lambda x, y: cmp(len(x.decode("utf-8")), len(y.decode("utf-8"))), reverse=True)
 
-location_suffix_tuple = (
-    "省", "市", "县", "特别行政区", "自治区", "壮族自治区", "回族自治区", "维吾尔自治区",
-    "自治州", "朝鲜族自治州", "土家族苗族自治州", "藏族羌族自治州", "藏族自治州",
-    "彝族自治州", "布依族苗族自治州", "苗族侗族自治州", "布依族苗族自治州", "彝族自治州",
-    "哈尼族彝族自治州", "壮族苗族自治州", "傣族自治州", "白族自治州", "傣族景颇族自治州",
-    "傈僳族自治州", "藏族自治州", "回族自治州", "蒙古族藏族自治州", "回族自治州", "蒙古自治州",
-    "哈萨克自治州", "柯尔克孜自治州", "瑶族自治县"
-)
+location_suffix_list = []
+for natitionality in nationality_list:
+    location_suffix_list.append(natitionality)
+    if len(natitionality.decode("utf-8")) > 2:
+        location_suffix_list.append(natitionality[:-len("族")])
+location_suffix_list = product(location_suffix_list, ["自治区", "自治州", "自治县"])
+location_suffix_list = ["".join([a, b]) for a, b in location_suffix_list]
+location_suffix_list.extend(["土家族苗族自治县", "依族苗族自治县", "苗族瑶族傣族自治县", "布依族苗族自治州", "回族彝族自治县", "哈尼族彝族傣族自治县", "壮族瑶族自治县", "土家族苗族自治县", "黎族苗族自治县", "苗族侗族自治县", "满族蒙古族自治县", "拉祜族佤族布朗族傣族自治县", "苗族侗族自治州", "土家族苗族自治州", "彝族傣族自治县", "壮族苗族自治州", "黎族苗族自治县", "苗族布依族自治县", "仡佬族苗族自治县", "藏族羌族自治州", "布依族苗族自治州", "土家族苗族自治州", "回族土族自治县", "仡佬族苗族自治县", "彝族回族苗族自治县", "回族土族自治县", "彝族回族自治县", "土家族苗族自治县", "苗族土家族自治县", "蒙古族藏族自治州", "彝族苗族自治县", "保安族东乡族撒拉族自治县", "傣族景颇族自治州", "傣族佤族自治县", "布依族苗族自治县", "哈尼族彝族自治州"])
+location_suffix_list.extend(["特别行政区", "省", "市", "县", "区", "镇", "乡", "村"])
+location_suffix_list.sort(lambda x, y: cmp(len(x.decode("utf-8")), len(y.decode("utf-8"))), reverse=True)
 
 def duration(start, end):
 
@@ -49,10 +52,19 @@ def load_dict(tsv_file):
     location_dict = dict((location_list[i][1], i) for i in xrange(len(location_list)))
     synonymy_map = {}
     for location_string in location_dict:
-        for location_suffix in location_suffix_tuple:
-            synonymy_map[location_string] = location_string
+        synonymy_map[location_string] = location_string
+        for location_suffix in location_suffix_list:
             if location_string.endswith(location_suffix):
-                synonymy_map[location_string[:-len(location_suffix)]] = location_string
+                location_synonymy = location_string[:-len(location_suffix)]
+                if len(location_synonymy.decode("utf-8")) < 2:
+                    break
+                if location_synonymy in synonymy_map and location_list[location_dict[synonymy_map[location_synonymy]]][0] >= location_list[location_dict[synonymy_map[location_string]]][0]:
+                    break
+                synonymy_map[location_synonymy] = location_string
+                break
+    #for location in synonymy_map:
+    #    if location != synonymy_map[location]:
+    #        print "%s\t->\t%s" % (location, synonymy_map[location])
     return location_dict, location_list, synonymy_map
 
 def reduce_set(location_set, location_dict, location_list, synonymy_map):
@@ -121,8 +133,6 @@ def main():
     assert judge_relation(set(["吉林省"]), set(["吉林市"]), location_dict, location_list, synonymy_map) is False
     assert judge_relation(set(["广州", "南宁"]), set(["南宁", "北京"]), location_dict, location_list, synonymy_map) is False
     assert judge_relation(set(["北京", "汉口"]), set(["北京", "青岛"]), location_dict, location_list, synonymy_map) is False
-
-    return
 
     with open(sim_file, 'r') as fd:
         for line in fd:
