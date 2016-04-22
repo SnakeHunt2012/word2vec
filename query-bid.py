@@ -45,9 +45,11 @@ def load_matrix(tsv_file):
     with open(tsv_file, "r") as fp:
         for line in fp:
             line = line.strip()
-            if len(line.split("\t")) != 3:
+            #if len(line.split("\t")) != 3:
+            if len(line.split("\t")) != 2:
                 continue
-            md5, phrase, vector = line.split("\t")
+            #md5, phrase, vector = line.split("\t")
+            phrase, vector = line.split("\t")
             if phrase in vec_dict:
                 continue
             vec_dict[phrase] = index
@@ -68,9 +70,11 @@ def load_normalized_matrix(tsv_file):
     with open(tsv_file, "r") as fp:
         for line in fp:
             line = line.strip()
-            if len(line.split("\t")) != 3:
+            #if len(line.split("\t")) != 3:
+            if len(line.split("\t")) != 2:
                 continue
-            md5, phrase, vector = line.split("\t")
+            #md5, phrase, vector = line.split("\t")
+            phrase, vector = line.split("\t")
             if phrase in vec_dict:
                 continue
             vec_dict[phrase] = index
