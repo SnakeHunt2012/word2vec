@@ -10,3 +10,4 @@ word-analogy
 compute-accuracy
 vocabulary.txt
 *.pyc
+*.tsv

@@ -84,7 +84,10 @@ class GenerageWeightedPhraseKernel(Thread):
                 if len(splited_line) != 2:
                     continue
                 phrase_str, phrase_seg = splited_line
-                word_list = [(token.split("")[0], float(token.split("")[1])) for token in phrase_seg.split("")]
+                try:
+                    word_list = [(token.split("")[0], float(token.split("")[1])) for token in phrase_seg.split("")]
+                except:
+                    continue
                 if word_list is None or len(word_list) == 0:
                     continue
                 phrase_weight = 0.0
