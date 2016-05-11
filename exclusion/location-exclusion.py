@@ -1,15 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from sys import getsizeof
+from re import compile
 from time import time
 from codecs import open
-from numpy import array, matrix
-from numpy.random import random
 from argparse import ArgumentParser
 from itertools import combinations, product
-from heapq import nlargest
-from pandas import read_csv
+
+DEBUG_FLAG = False
 
 nationality_list = [
     "壮族", "藏族", "裕固族", "彝族", "瑶族", "锡伯族", "乌孜别克族", "维吾尔族", "佤族", "土家族",
@@ -134,6 +132,7 @@ def main():
     assert judge_relation(set(["广州", "南宁"]), set(["南宁", "北京"]), location_dict, location_list, synonymy_map) is False
     assert judge_relation(set(["北京", "汉口"]), set(["北京", "青岛"]), location_dict, location_list, synonymy_map) is False
 
+    spliter = compile("(?<=\/[0-9].[0-9][0-9][0-9][0-9][0-9][0-9]) ")
     with open(sim_file, 'r') as fd:
         for line in fd:
             splited_line = line.strip().split("\t")
@@ -141,7 +140,8 @@ def main():
                 continue
             
             query = splited_line.pop(0)
-            bidword_list = "".join(splited_line).strip(";").split(";")
+            #bidword_list = "".join(splited_line).strip(";").split(";")
+            bidword_list = [('/'.join(bidword.split('/')[:-1]), bidword.split('/')[-1]) for bidword in spliter.split(splited_line.pop(-1))]
         
             query_location_set = set()
             for query_seg in query.split():
@@ -149,29 +149,31 @@ def main():
                     query_location_set.add(query_seg)
 
             if len(query_location_set) == 0:
-                print "%s\t%s" % (query, ";".join(bidword_list))
+                print "%s\t%s" % (query, " ".join(["%s/%s" % (bidword, score) for bidword, score in bidword_list]))
                 continue
         
             res_list = []
             exc_list = [] # for debug
-            for bidword in bidword_list:
+            for bidword, score in bidword_list:
                 bidword_location_set = set()
                 for bidword_seg in bidword.split():
                     if bidword_seg in location_set:
                         bidword_location_set.add(bidword_seg)
                 if len(bidword_location_set) == 0:
-                    res_list.append(bidword)
+                    res_list.append("%s/%s" % (bidword, score))
                     continue
                 if judge_relation(query_location_set, bidword_location_set, location_dict, location_list, synonymy_map):
-                    res_list.append(bidword)
+                    res_list.append("%s/%s" % (bidword, score))
                 else:
-                    exc_list.append(bidword)
+                    exc_list.append("%s/%s" % (bidword, score))
             assert len(res_list) + len(exc_list) == len(bidword_list)
 
-            #if len(exc_list) > 0:
-            #    print "%s\t%s" % (query, ";".join(exc_list))
-            if len(res_list) > 0:
-                print "%s\t%s" % (query, ";".join(res_list))
+            if DEBUG_FLAG:
+                if len(exc_list) > 0:
+                    print "%s\t%s" % (query, " ".join(exc_list))
+            else:
+                if len(res_list) > 0:
+                    print "%s\t%s" % (query, " ".join(res_list))
                 
 if __name__ == "__main__":
 
