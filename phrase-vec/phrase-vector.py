@@ -33,7 +33,14 @@ class GeneragePhraseKernel(Thread):
         with open(self.seg_file, "r", encoding = "utf-8") as fp:
             counter = 0
             iterator = 0
-            for line in fp:
+            while True:
+                line = None
+                try:
+                    line = fp.readline()
+                except Exception:
+                    continue
+                if not line:
+                    break
                 if iterator % self.base_number == self.serial_number:
                     iterator += 1
                 else:
@@ -98,8 +105,6 @@ class GenerageWeightedPhraseKernel(Thread):
                         phrase_weight += weight
                 if phrase_weight > 0:
                     vector /= phrase_weight
-                else:
-                    continue
                 #stdout.write("%s\t%s\n" % (" ".join([("%s[%f]") % (word, weight) for word, weight in word_list]).encode("utf-8"), " ".join([str(i) for i in vector])))
                 stdout.write("%s\t%s\n" % (" ".join([word for word, weight in word_list]).encode("utf-8"), " ".join([str(i) for i in vector])))
                 stdout.flush()
@@ -177,8 +182,8 @@ def interactive(word_dict):
 def main():
 
     parser = ArgumentParser()
-    parser.add_argument("seg_file", help = "segment file with term weight one query/bidword per line in tsv format")
     parser.add_argument("dict_file", help = "word2vec file in json format")
+    parser.add_argument("seg_file", help = "segment file with term weight one query/bidword per line in tsv format")
     args = parser.parse_args()
     
     seg_file = args.seg_file
