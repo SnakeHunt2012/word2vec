@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from re import compile
 from time import time
 from codecs import open
 from argparse import ArgumentParser
@@ -63,6 +64,7 @@ def main():
     for school in school_set:
         assert school in synonymy_map
 
+    spliter = compile("(?<=\/[0-9].[0-9][0-9][0-9][0-9][0-9][0-9]) ")
     with open(sim_file, 'r') as fd:
         for line in fd:
             splited_line = line.strip().split("\t")
@@ -70,7 +72,8 @@ def main():
                 continue
             
             query = splited_line.pop(0)
-            bidword_list = "".join(splited_line).strip(";").split(";")
+            #bidword_list = "".join(splited_line).strip(";").split(";")
+            bidword_list = [('/'.join(bidword.split('/')[:-1]), bidword.split('/')[-1]) for bidword in spliter.split(splited_line.pop(-1))]            
         
             query_school_set = set()
             for query_seg in query.split():
@@ -79,31 +82,31 @@ def main():
 
             if len(query_school_set) == 0:
                 if not EXCLUEDE_FLAG:
-                    print "%s\t%s" % (query, ";".join(bidword_list))
+                    print "%s\t%s" % (query, " ".join(["%s/%s" % (bidword, score) for bidword, score in bidword_list]))
                 continue
 
             res_list = []
             exc_list = [] # for debug
-            for bidword in bidword_list:
+            for bidword, score in bidword_list:
                 bidword_school_set = set()
                 for bidword_seg in bidword.split():
                     if bidword_seg in synonymy_map:
                         bidword_school_set.add(bidword_seg)
                 if len(bidword_school_set) == 0:
-                    res_list.append(bidword)
+                    res_list.append("%s/%s" % (bidword, score))
                     continue
                 if judge_relation(query_school_set, bidword_school_set, synonymy_map):
-                    res_list.append(bidword)
+                    res_list.append("%s/%s" % (bidword, score))
                 else:
-                    exc_list.append(bidword)
+                    exc_list.append("%s/%s" % (bidword, score))
             assert len(res_list) + len(exc_list) == len(bidword_list)
 
             if EXCLUEDE_FLAG:
                 if len(exc_list) > 0:
-                    print "%s\t%s" % (query, ";".join(exc_list))
+                    print "%s\t%s" % (query, " ".join(exc_list))
             else:
                 if len(res_list) > 0:
-                    print "%s\t%s" % (query, ";".join(res_list))
+                    print "%s\t%s" % (query, " ".join(res_list))
                 
                     
 if __name__ == "__main__":
