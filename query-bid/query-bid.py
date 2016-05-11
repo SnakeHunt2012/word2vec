@@ -13,7 +13,7 @@ from heapq import nlargest
 
 import numpy as np
 
-DEBUG_FLAG = True
+DEBUG_FLAG = False
 
 def duration(start, end):
 
@@ -79,7 +79,9 @@ def load_normalized_matrix(tsv_file):
                 continue
             vec_dict[phrase] = index
             phrase_array = array(vector.split(), dtype = "float32")
-            phrase_array /= np.sqrt(np.dot(phrase_array, phrase_array))
+            norm = np.sqrt(np.dot(phrase_array, phrase_array))
+            if norm > 0.0:
+                phrase_array /= norm
             vec_list.append(phrase_array)
             phrase_list.append(phrase)
             index += 1
@@ -95,7 +97,7 @@ def sort_matrix(sim_matrix, query_list, query_index_list, bidword_list, bidword_
         length_before = len(bidword_index_list)
         sim_matrix_row = sim_matrix[i]
         bidword_index_length = len(bidword_index_list)
-        sorted_list = nlargest(300, ((sim_matrix_row[j], bidword_index_list[j]) for j in xrange(bidword_index_length) if sim_matrix_row[j] > threshold))
+        sorted_list = nlargest(1000, ((sim_matrix_row[j], bidword_index_list[j]) for j in xrange(bidword_index_length) if sim_matrix_row[j] > threshold))
         length_after = len(sorted_list)
         query_string = query_list[query_index_list[i]]
 
@@ -111,7 +113,8 @@ def sort_matrix(sim_matrix, query_list, query_index_list, bidword_list, bidword_
             for sim_score, bidword_index in sorted_list:
                 if sim_score < threshold:
                     break
-                print "%s;" % (bidword_list[bidword_index]),
+                #print "%s;" % (bidword_list[bidword_index]),
+                print "%s/%f" % (bidword_list[bidword_index], sim_score),
             print
     return time() - time_flag
 
@@ -259,17 +262,17 @@ def main():
                 if circum_hash_key in bidword_hash_dict_list[i]:
                     bidword_index_set |= bidword_hash_dict_list[i][circum_hash_key]
             profiler_first_three += time() - time_flag_first_three
-            # circum hash with hamming distance 3
-            time_flag_first_four = time()
-            for first_index, second_index, third_index in combinations(range(hash_length), 3):
-                circum_hash_key = list(hash_key)
-                circum_hash_key[first_index] = '1' if hash_key[first_index] == '0' else '0'
-                circum_hash_key[second_index] = '1' if hash_key[second_index] == '0' else '0'
-                circum_hash_key[third_index] = '1' if hash_key[third_index] == '0' else '0'
-                circum_hash_key = "".join(circum_hash_key)
-                if circum_hash_key in bidword_hash_dict_list[i]:
-                    bidword_index_set |= bidword_hash_dict_list[i][circum_hash_key]
-            profiler_first_four += time() - time_flag_first_four
+            ## circum hash with hamming distance 3
+            #time_flag_first_four = time()
+            #for first_index, second_index, third_index in combinations(range(hash_length), 3):
+            #    circum_hash_key = list(hash_key)
+            #    circum_hash_key[first_index] = '1' if hash_key[first_index] == '0' else '0'
+            #    circum_hash_key[second_index] = '1' if hash_key[second_index] == '0' else '0'
+            #    circum_hash_key[third_index] = '1' if hash_key[third_index] == '0' else '0'
+            #    circum_hash_key = "".join(circum_hash_key)
+            #    if circum_hash_key in bidword_hash_dict_list[i]:
+            #        bidword_index_set |= bidword_hash_dict_list[i][circum_hash_key]
+            #profiler_first_four += time() - time_flag_first_four
         # computing sim between query_index_list and bidword_index_list
         profiler_first += time() - time_flag_first
         
@@ -277,10 +280,10 @@ def main():
         bidword_index_list = list(bidword_index_set)
         if DEBUG_FLAG:
             print "Matrix shape:", query_matrix[query_index_list, :].shape, bidword_matrix[bidword_index_list, :].transpose().shape, len(query_index_list) * len(bidword_index_list)
-        if len(bidword_index_list) > 1e8 * 5:
+        if len(bidword_index_list) > 1e8 * 2:
             raise Exception("bidword_index_list too long: %d" % len(query_index_list))
         
-        step = int(1e8 * 5 / len(bidword_index_list))
+        step = int(1e8 * 2 / len(bidword_index_list))
         partition_begin = 0
         partition_end = 0
         while partition_end < len(query_index_list):
