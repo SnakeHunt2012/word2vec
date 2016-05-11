@@ -149,7 +149,8 @@ def main():
                     query_location_set.add(query_seg)
 
             if len(query_location_set) == 0:
-                print "%s\t%s" % (query, " ".join(["%s/%s" % (bidword, score) for bidword, score in bidword_list]))
+                if not DEBUG_FLAG:
+                    print "%s\t%s" % (query, " ".join(["%s/%s" % (bidword, score) for bidword, score in bidword_list]))
                 continue
         
             res_list = []
