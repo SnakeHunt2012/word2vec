@@ -117,7 +117,6 @@ def main():
     code_dict, stock_dict, prefix_dict = load_stock_dict(stock_file)
 
     outer_spliter = compile("(?<=\/[0-9].[0-9][0-9][0-9][0-9][0-9][0-9]) ")
-    inner_spliter = compile("/")
     
     assert "300136" in parse_code_set(code_dict, prefix_dict, "信维通信")
     assert "300136" in parse_code_set(code_dict, prefix_dict, "信维通信 ")
@@ -173,10 +172,13 @@ def main():
                 continue
     
             res_list = []
+            res_set = set([])
             for bidword, score in bidword_list:
                 assert score.replace('.', '').isdigit()
                 new_bidword = replace_stock(code_dict, stock_dict, prefix_dict, query_code_set, bidword)
-                res_list.append((new_bidword, score))
+                if new_bidword not in res_set:
+                    res_list.append((new_bidword, score))
+                    res_set.add(new_bidword)
             print "%s\t%s" % (query_str, " ".join(["%s/%s" % (bidword, score) for bidword, score in res_list]))
             
 
