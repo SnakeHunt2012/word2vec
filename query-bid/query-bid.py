@@ -7,7 +7,7 @@ from codecs import open
 from numpy import array
 from numpy.random import random, random_sample
 from argparse import ArgumentParser
-from cudamat import cublas_init, CUDAMatrix, dot
+from cudamat import cuda_set_device, cublas_init, CUDAMatrix, dot
 from itertools import combinations
 from heapq import nlargest
 
@@ -152,6 +152,7 @@ def main():
     if DEBUG_FLAG:
         print "initing cublas ..."
     start = time()
+    cuda_set_device(2)
     cublas_init(1000000)
     end = time()
     if DEBUG_FLAG:
@@ -162,15 +163,15 @@ def main():
     start = time()
     cuda_seed_matrix = CUDAMatrix(seed_matrix)
     cuda_bidword_matrix = CUDAMatrix(bidword_matrix)
-    cuda_query_matrix = CUDAMatrix(query_matrix)
     bidword_hash_matrix = dot(cuda_bidword_matrix, cuda_seed_matrix).asarray()
+    del cuda_bidword_matrix
+    cuda_query_matrix = CUDAMatrix(query_matrix)
     query_hash_matrix = dot(cuda_query_matrix, cuda_seed_matrix).asarray()
+    del cuda_query_matrix
     end = time()
     if DEBUG_FLAG:
         print "computing hash_matrix done", duration(start, end)
 
-    del cuda_bidword_matrix
-    del cuda_query_matrix
     
     if DEBUG_FLAG:
         print "initing bidword_hash_dict_list ..."
@@ -278,12 +279,14 @@ def main():
         
         query_index_list = list(query_index_set)
         bidword_index_list = list(bidword_index_set)
+
+        partition_length = 1e8 * 2
         if DEBUG_FLAG:
             print "Matrix shape:", query_matrix[query_index_list, :].shape, bidword_matrix[bidword_index_list, :].transpose().shape, len(query_index_list) * len(bidword_index_list)
-        if len(bidword_index_list) > 1e8 * 2:
+        if len(bidword_index_list) > partition_length:
             raise Exception("bidword_index_list too long: %d" % len(query_index_list))
         
-        step = int(1e8 * 2 / len(bidword_index_list))
+        step = int(partition_length / len(bidword_index_list))
         partition_begin = 0
         partition_end = 0
         while partition_end < len(query_index_list):
