@@ -9,5 +9,7 @@ distance
 word-analogy
 compute-accuracy
 vocabulary.txt
+buffer
 *.pyc
 *.tsv
+*.json
