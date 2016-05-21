@@ -99,14 +99,23 @@ class GenerageWeightedPhraseKernel(Thread):
                     continue
                 phrase_weight = 0.0
                 vector = zeros(200, dtype = "float32")
+                match_count = 0
+                match_length = 0
                 for word, weight in word_list:
                     if word in self.word_dict:
                         vector += weightlize(array(self.word_dict[word], dtype = "float32"), weight)
                         phrase_weight += weight
+                        match_count += 1
+                        match_length += len(word.encode("utf-8"))
                 if phrase_weight > 0:
                     vector /= phrase_weight
-                #stdout.write("%s\t%s\n" % (" ".join([("%s[%f]") % (word, weight) for word, weight in word_list]).encode("utf-8"), " ".join([str(i) for i in vector])))
-                stdout.write("%s\t%s\n" % (" ".join([word for word, weight in word_list]).encode("utf-8"), " ".join([str(i) for i in vector])))
+                total_count = len(word_list)
+                total_length = sum([len(word.encode("utf-8")) for word, weight in word_list])
+                if float(match_count) / total_count >= 0.5 and float(match_length) / total_length >= 0.5:
+                    #stdout.write("%s\t%s\n" % (" ".join([("%s[%f]") % (word, weight) for word, weight in word_list]).encode("utf-8"), " ".join([str(i) for i in vector])))
+                    stdout.write("%s\t%s\n" % (" ".join([word for word, weight in word_list]).encode("utf-8"), " ".join([str(i) for i in vector])))
+                #else:
+                #    stdout.write("### filtered ###: %s\t%d/%d\t%d/%d\n" % (" ".join([word for word, weight in word_list]).encode("utf-8"), match_count, total_count, match_length, total_length))
                 stdout.flush()
                 
 def load_dict(input_file):
