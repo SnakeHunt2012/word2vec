@@ -348,6 +348,34 @@ def school_exclusion(school_synonymy_map, query, bidword_list):
 
     return res_list, exc_list
 
+def coincide_exclusion(query, bidword_list):
+
+    res_list = []
+    exc_list = []
+
+    query_term_set = set(query.split())
+    query_length = sum([len(term) for term in query_term_set])
+    if query_length == 0:
+        exc_list = bidword_list
+        res_list = []
+        return res_list, exc_list
+    for bidword, score in bidword_list:
+        bidword_term_set = set(bidword.split())
+        bidword_length = sum([len(term) for term in bidword_term_set])
+        if bidword_length == 0:
+            exc_list.append((bidword, score))
+            continue
+        intersection_set = query_term_set & bidword_term_set
+        intersection_length = sum([len(term) for term in intersection_set])
+        query_intersection_rate = float(intersection_length) / float(query_length)
+        bidword_intersection_rate = float(intersection_length) / float(bidword_length)
+        if query_intersection_rate >= 0.5 or bidword_intersection_rate >= 0.5:
+            exc_list.append((bidword, score))
+        else:
+            res_list.append((bidword, score))
+        
+    return res_list, exc_list
+
 def stock_replace(code_dict, stock_dict, prefix_dict, query, bidword_list):
 
     res_list = []
@@ -471,7 +499,12 @@ def main():
             assert len(res_list) + len(exc_list) == len(bidword_list)
             
             bidword_list = res_list
-            
+
+            res_list, exc_list = coincide_exclusion(query, bidword_list)
+            assert len(res_list) + len(exc_list) == len(bidword_list)
+
+            bidword_list = res_list
+
             res_list = stock_replace(code_dict, stock_dict, prefix_dict, query, bidword_list)
             
             bidword_list = res_list
