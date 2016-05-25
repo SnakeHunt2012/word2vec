@@ -54,7 +54,7 @@ def load_location_dict(tsv_file):
     location_suffix_list = product(location_suffix_list, ["自治区", "自治州", "自治县"])
     location_suffix_list = ["".join([a, b]) for a, b in location_suffix_list]
     location_suffix_list.extend(["土家族苗族自治县", "依族苗族自治县", "苗族瑶族傣族自治县", "布依族苗族自治州", "回族彝族自治县", "哈尼族彝族傣族自治县", "壮族瑶族自治县", "土家族苗族自治县", "黎族苗族自治县", "苗族侗族自治县", "满族蒙古族自治县", "拉祜族佤族布朗族傣族自治县", "苗族侗族自治州", "土家族苗族自治州", "彝族傣族自治县", "壮族苗族自治州", "黎族苗族自治县", "苗族布依族自治县", "仡佬族苗族自治县", "藏族羌族自治州", "布依族苗族自治州", "土家族苗族自治州", "回族土族自治县", "仡佬族苗族自治县", "彝族回族苗族自治县", "回族土族自治县", "彝族回族自治县", "土家族苗族自治县", "苗族土家族自治县", "蒙古族藏族自治州", "彝族苗族自治县", "保安族东乡族撒拉族自治县", "傣族景颇族自治州", "傣族佤族自治县", "布依族苗族自治县", "哈尼族彝族自治州"])
-    location_suffix_list.extend(["特别行政区", "省", "市", "县", "区", "镇", "乡", "村"])
+    location_suffix_list.extend(["特别行政区", "省", "市", "县", "区", "乡", "镇", "村"])
     location_suffix_list.sort(lambda x, y: cmp(len(x.decode("utf-8")), len(y.decode("utf-8"))), reverse=True)
 
     location_list = []
@@ -79,6 +79,8 @@ def load_location_dict(tsv_file):
                 synonymy_map[location_synonymy] = location_string
                 break
     synonymy_map["内蒙古"] = "内蒙古自治区"
+    synonymy_map["马鞍山"] = "马鞍山市"
+    synonymy_map["安徽"] = "安徽省"
     #for location in synonymy_map:
     #    if location != synonymy_map[location]:
     #        print "%s\t->\t%s" % (location, synonymy_map[location])
@@ -436,6 +438,8 @@ def main():
     assert location_judge_relation(set(["诸暨"]), set(["诸暨"]), location_dict, location_list, location_synonymy_map) is True
     assert location_judge_relation(set(["哈尔滨"]), set(["黑龙江"]), location_dict, location_list, location_synonymy_map) is True
     assert location_judge_relation(set(["湖北"]), set(["内蒙古"]), location_dict, location_list, location_synonymy_map) is False
+    assert location_judge_relation(set(["马鞍山"]), set(["四川"]), location_dict, location_list, location_synonymy_map) is False
+    assert location_judge_relation(set(["马鞍山"]), set(["安徽"]), location_dict, location_list, location_synonymy_map) is True
 
     # check school dict data
     for school in school_set:
