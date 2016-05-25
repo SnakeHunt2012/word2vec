@@ -4,8 +4,6 @@
 from codecs import open
 from argparse import ArgumentParser
 
-DEBUG_FLAG = False
-
 def load_suffix_set(tsv_file):
 
     suffix_set = set([])
@@ -28,11 +26,13 @@ def main():
     parser.add_argument("stopword_file", help = "stopword file in tsv format")
     parser.add_argument("suffix_file", help = "word-weight in tsv format")
     parser.add_argument("seg_file", help = "phrase segment file (original phrase and segmented phrase) one phrase per line in tsv format")
+    parser.add_argument("--shrink", help = "sort terms in order to shrink phrase space", action = "store_true")
     args = parser.parse_args()
 
     stopword_file = args.stopword_file
     suffix_file = args.suffix_file
     seg_file = args.seg_file
+    shrink_flag = args.shrink
 
     suffix_set = load_suffix_set(suffix_file)
     stopword_set = load_stopword_set(stopword_file)
@@ -51,12 +51,10 @@ def main():
             if len(phrase_seg_list) == 0:
                 continue
             phrase_seg_list = [word for word in phrase_seg_list if word not in stopword_set]
-            if DEBUG_FLAG:
-                if len(phrase_seg_list) != len(phrase_seg.split()):
-                    print "%s\t%s" % (phrase_str, " ".join(phrase_seg_list))
-            else:
+            if shrink_flag:
+                print "%s\t%s" % (phrase_str, " ".join(sorted(phrase_seg_list)))
+            else:                
                 print "%s\t%s" % (phrase_str, " ".join(phrase_seg_list))
-            
 
 if __name__ == "__main__":
 
