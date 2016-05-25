@@ -367,9 +367,9 @@ def coincide_exclusion(query, bidword_list):
             continue
         intersection_set = query_term_set & bidword_term_set
         intersection_length = sum([len(term) for term in intersection_set])
-        query_intersection_rate = float(intersection_length) / float(query_length)
-        bidword_intersection_rate = float(intersection_length) / float(bidword_length)
-        if query_intersection_rate >= 0.5 or bidword_intersection_rate >= 0.5:
+        count_intersection_rate = float(len(intersection_set)) / min(float(len(query_term_set)), float(len(bidword_term_set)))
+        length_intersection_rate = float(intersection_length) / min(float(query_length), float(bidword_length))
+        if count_intersection_rate >= 0.6 or length_intersection_rate >= 0.6:
             exc_list.append((bidword, score))
         else:
             res_list.append((bidword, score))
@@ -489,14 +489,14 @@ def main():
 
         res_list, exc_list = brand_exclusion(brand_set, category_dict, query, bidword_list)
         assert len(res_list) + len(exc_list) == len(bidword_list)
-
+        
         bidword_list = res_list
-
+        
         res_list, exc_list = location_exclusion(location_dict, location_list, location_synonymy_map, location_set, query, bidword_list)
         assert len(res_list) + len(exc_list) == len(bidword_list)
-
+        
         bidword_list = res_list
-
+        
         res_list, exc_list = school_exclusion(school_synonymy_map, query, bidword_list)
         assert len(res_list) + len(exc_list) == len(bidword_list)
         
@@ -504,7 +504,7 @@ def main():
         
         res_list, exc_list = coincide_exclusion(query, bidword_list)
         assert len(res_list) + len(exc_list) == len(bidword_list)
-
+        
         bidword_list = res_list
 
         res_list = stock_replace(code_dict, stock_dict, prefix_dict, query, bidword_list)
