@@ -97,7 +97,7 @@ def sort_matrix(sim_matrix, query_list, query_index_list, bidword_list, bidword_
         length_before = len(bidword_index_list)
         sim_matrix_row = sim_matrix[i]
         bidword_index_length = len(bidword_index_list)
-        sorted_list = nlargest(1000, ((sim_matrix_row[j], bidword_index_list[j]) for j in xrange(bidword_index_length) if sim_matrix_row[j] > threshold))
+        sorted_list = nlargest(1500, ((sim_matrix_row[j], bidword_index_list[j]) for j in xrange(bidword_index_length) if sim_matrix_row[j] > threshold))
         length_after = len(sorted_list)
         query_string = query_list[query_index_list[i]]
 
@@ -109,13 +109,16 @@ def sort_matrix(sim_matrix, query_list, query_index_list, bidword_list, bidword_
                 print "%s(%f)" % (bidword_list[bidword_index], sim_score),
             print
         else:
-            print "%s\t" % (query_string),
+            #print "%s\t" % (query_string),
+            res_list = []
             for sim_score, bidword_index in sorted_list:
                 if sim_score < threshold:
                     break
-                #print "%s;" % (bidword_list[bidword_index]),
-                print "%s/%f" % (bidword_list[bidword_index], sim_score),
-            print
+                #print "%s%f;" % (bidword_list[bidword_index], sim_score),
+                res_list.append("%s%f" % (bidword_list[bidword_index], sim_score))
+            #print
+            if len(res_list) > 0:
+                print "%s\t%s" % (query_string, ";".join(res_list))
     return time() - time_flag
 
 def main():
@@ -152,7 +155,7 @@ def main():
     if DEBUG_FLAG:
         print "initing cublas ..."
     start = time()
-    cuda_set_device(2)
+    cuda_set_device(1)
     cublas_init(1000000)
     end = time()
     if DEBUG_FLAG:
@@ -280,9 +283,9 @@ def main():
         query_index_list = list(query_index_set)
         bidword_index_list = list(bidword_index_set)
 
-        partition_length = 1e8 * 2
-        if DEBUG_FLAG:
-            print "Matrix shape:", query_matrix[query_index_list, :].shape, bidword_matrix[bidword_index_list, :].transpose().shape, len(query_index_list) * len(bidword_index_list)
+        partition_length = 1e8
+        if DEBUG_FLAG or True:
+            print "### profile ### matrix shape:", query_matrix[query_index_list, :].shape, bidword_matrix[bidword_index_list, :].transpose().shape, len(query_index_list) * len(bidword_index_list)
         if len(bidword_index_list) > partition_length:
             raise Exception("bidword_index_list too long: %d" % len(query_index_list))
         
@@ -291,8 +294,8 @@ def main():
         partition_end = 0
         while partition_end < len(query_index_list):
             partition_end = len(query_index_list) if partition_begin + step > len(query_index_list) else partition_begin + step
-            if DEBUG_FLAG:
-                print "partition_begin:", partition_begin, "partition_end:", partition_end, "type(partition_begin):", type(partition_begin), "type(partition_end):", type(partition_end)
+            if DEBUG_FLAG or True:
+                print "### profile ### partition_begin:", partition_begin, "partition_end:", partition_end
             time_flag_second = time()
             sim_matrix = dot(
                 CUDAMatrix(query_matrix[query_index_list[partition_begin:partition_end], :]),
@@ -303,8 +306,8 @@ def main():
             partition_begin = partition_end
             
         profiler_total += time() - time_flag_total
-        if DEBUG_FLAG:
-            print "###profile### total=%f first=%f(%f)[%f(%f)%f(%f)%f(%f)%f(%f)%f(%f)] second=%f(%f) third=%f(%f) %s(%f)" % (
+        if DEBUG_FLAG or True:
+            print "### profile ### total=%f first=%f(%f)[%f(%f)%f(%f)%f(%f)%f(%f)%f(%f)] second=%f(%f) third=%f(%f) %s(%f)" % (
                 profiler_total,
                 profiler_first, profiler_first / profiler_total,
                 profiler_first_zero, profiler_first_zero / profiler_first,
