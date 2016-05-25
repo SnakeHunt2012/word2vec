@@ -49,13 +49,13 @@ def main():
             weight_sum = sum([weight_dict[word] for word in phrase_seg_list])
             if DEBUG_FLAG:
                 if weight_sum == 0.0:
-                    res_list = ["%s/%s" % (word, weight_dict[word]) for word in phrase_seg_list]
+                    res_list = ["%s/%s" % (word, 1.0 / len(phrase_seg_list)) for word in phrase_seg_list]
                 else:
                     res_list = ["%s/%s" % (word, weight_dict[word] / weight_sum) for word in phrase_seg_list]
                 print "%s\t%s" % (phrase_str, " ".join(res_list))
             else:
                 if weight_sum == 0.0:
-                    res_list = ["%s%s" % (word, weight_dict[word]) for word in phrase_seg_list]
+                    res_list = ["%s%s" % (word, 1.0 / len(phrase_seg_list)) for word in phrase_seg_list]
                 else:
                     res_list = ["%s%s" % (word, weight_dict[word] / weight_sum) for word in phrase_seg_list]
                 print "%s\t%s" % (phrase_str, "".join(res_list))
