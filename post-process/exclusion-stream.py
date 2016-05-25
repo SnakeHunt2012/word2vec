@@ -78,6 +78,7 @@ def load_location_dict(tsv_file):
                     break
                 synonymy_map[location_synonymy] = location_string
                 break
+    synonymy_map["内蒙古"] = "内蒙古自治区"
     #for location in synonymy_map:
     #    if location != synonymy_map[location]:
     #        print "%s\t->\t%s" % (location, synonymy_map[location])
@@ -434,6 +435,7 @@ def main():
     assert location_judge_relation(set(["北京", "汉口"]), set(["北京", "青岛"]), location_dict, location_list, location_synonymy_map) is False
     assert location_judge_relation(set(["诸暨"]), set(["诸暨"]), location_dict, location_list, location_synonymy_map) is True
     assert location_judge_relation(set(["哈尔滨"]), set(["黑龙江"]), location_dict, location_list, location_synonymy_map) is True
+    assert location_judge_relation(set(["湖北"]), set(["内蒙古"]), location_dict, location_list, location_synonymy_map) is False
 
     # check school dict data
     for school in school_set:
