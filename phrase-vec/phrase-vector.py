@@ -95,8 +95,6 @@ class GenerageWeightedPhraseKernel(Thread):
                     word_list = [(token.split("")[0], float(token.split("")[1])) for token in phrase_seg.split("")]
                 except:
                     continue
-                if word_list is None or len(word_list) == 0:
-                    continue
                 phrase_weight = 0.0
                 vector = zeros(200, dtype = "float32")
                 match_count = 0
@@ -118,11 +116,25 @@ class GenerageWeightedPhraseKernel(Thread):
                 #    stdout.write("### filtered ###: %s\t%d/%d\t%d/%d\n" % (" ".join([word for word, weight in word_list]).encode("utf-8"), match_count, total_count, match_length, total_length))
                 stdout.flush()
                 
-def load_dict(input_file):
+#def load_dict(input_file):
+#
+#    with open(input_file, "r", encoding = "utf-8") as fp:
+#        json_dict = loads(fp.read(), encoding = "utf-8")
+#    return json_dict
 
-    with open(input_file, "r", encoding = "utf-8") as fp:
-        json_dict = loads(fp.read(), encoding = "utf-8")
-    return json_dict
+def load_dict(tsv_file):
+
+    word_dict = {}
+    with open(tsv_file, "r", encoding = "utf-8") as fd:
+        for line in fd:
+            splited_line = line.strip().split("\t")
+            if len(splited_line) != 2:
+                continue
+            word, vector = splited_line
+            if word not in word_dict:
+                word_dict[word] = [float(value) for value in vector.split()]
+                assert len(word_dict[word]) == 200
+    return word_dict
 
 def generate_phrase_vector(seg_file, dict_file, thread_number = 1):
 
@@ -138,56 +150,6 @@ def generate_phrase_vector(seg_file, dict_file, thread_number = 1):
     for thread in thread_list:
         thread.join()
 
-def print_word_length(word_dict, word):
-    if word not in word_dict:
-        print word, "not in dict"
-        return
-    word_vector = array(word_dict[word], dtype="float32")
-    print sqrt(dot(word_vector, word_vector))
-
-def print_phrase_sim(word_dict, phrase_one, phrase_two):
-    word_list_one = phrase_one.split("+")
-    word_list_two = phrase_two.split("+")
-    for word in word_list_one + word_list_two:
-        if word not in word_dict:
-            print word, "not in dict"
-            return
-
-    word_count = 0
-    vector = zeros(200, dtype = "float32")
-    for word in word_list_one:
-        if word in word_dict:
-            vector += array(word_dict[word], dtype = "float32")
-            word_count += 1
-    if word_count > 0:
-        vector /= word_count
-    word_one_vector = vector
-        
-    word_count = 0
-    vector = zeros(200, dtype = "float32")
-    for word in word_list_two:
-        if word in word_dict:
-            vector += array(word_dict[word], dtype = "float32")
-            word_count += 1
-    if word_count > 0:
-        vector /= word_count
-    word_two_vector = vector
-        
-    word_one_length = sqrt(dot(word_one_vector, word_one_vector))
-    word_two_length = sqrt(dot(word_two_vector, word_two_vector))
-    print dot(word_one_vector, word_two_vector) / word_one_length / word_two_length
-
-def interactive(word_dict):
-
-    print "Usage: input \"word\" for vector length or \"word+word word+word\" for sim score"
-    while True:
-        line = stdin.readline().strip().decode("utf-8")
-        if len(line.split()) == 1:
-            print_word_length(word_dict, line.split()[0])
-        
-        if len(line.split()) == 2:
-            print_phrase_sim(word_dict, line.split()[0], line.split()[1])
-
 def main():
 
     parser = ArgumentParser()
@@ -199,10 +161,6 @@ def main():
     dict_file = args.dict_file
 
     generate_phrase_vector(seg_file, dict_file)
-
-    #word_dict = load_dict(dict_file)
-    #interactive(word_dict)
-        
 
 if __name__ == "__main__":
 
