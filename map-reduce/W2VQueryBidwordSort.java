@@ -181,7 +181,6 @@ public class W2VQueryBidwordSort extends Configured implements Tool {
                 feature[i] = Float.parseFloat(fields[i]);
             }
 
-
             int hashId = Common.getLSH(feature);
 
             context.write(new TextPair(hashId, 0F), new Text("0\t" + line));
@@ -230,9 +229,10 @@ public class W2VQueryBidwordSort extends Configured implements Tool {
 
             ArrayList<String> bidwords = new ArrayList<String>();
             ArrayList<float[]> vectors = new ArrayList<float[]>();
-            ArrayList<Float> bidwordNorms = new ArrayList<Float>();
+            // remove vector-nomalization logic
+            //ArrayList<Float> bidwordNorms = new ArrayList<Float>();
             boolean printed = false;
-            int maxBidwordCount = 1000;
+            int maxBidwordCount = 500; // modify bidword candidate set length from 1000 -> 500
 
             PriorityQueue<TextPair> bid2sim = new PriorityQueue<TextPair>(maxBidwordCount, new Comparator<TextPair>() {
                 @Override
@@ -267,11 +267,13 @@ public class W2VQueryBidwordSort extends Configured implements Tool {
                         feature[i] = Float.parseFloat(fields[i]);
                     }
 
-                    float bidwordNorm = (float) Math.sqrt(Common.getInnerProduct(feature, feature));
+                    // remove vector-nomalization logic 
+                    //float bidwordNorm = (float) Math.sqrt(Common.getInnerProduct(feature, feature));
 
                     bidwords.add(bidword);
                     vectors.add(feature);
-                    bidwordNorms.add(bidwordNorm);
+                    // remove vector-nomalization logic 
+                    //bidwordNorms.add(bidwordNorm);
                 } else {
                     if (!printed) {
                         System.out.println(bidwords.size());
@@ -291,11 +293,14 @@ public class W2VQueryBidwordSort extends Configured implements Tool {
                         feature[i] = Float.parseFloat(fields[i]);
                     }
 
-                    double queryNorm = Math.sqrt(Common.getInnerProduct(feature, feature));
+                    // remove vector-nomalization logic
+                    //double queryNorm = Math.sqrt(Common.getInnerProduct(feature, feature));
                     for (int i = 0; i < bidwords.size(); ++i) {
-                        float similarity = (float) (Common.getInnerProduct(feature, vectors.get(i)) / (queryNorm * bidwordNorms.get(i)));
+                        // remove vector-nomalization logic
+                        //float similarity = (float) (Common.getInnerProduct(feature, vectors.get(i)) / (queryNorm * bidwordNorms.get(i)));
+                        float similarity = (float) (Common.getInnerProduct(feature, vectors.get(i)));
 
-                        if (similarity < 0.5){
+                        if (similarity < 0.5) {
                             continue;
                         }
 
@@ -318,9 +323,7 @@ public class W2VQueryBidwordSort extends Configured implements Tool {
                     context.getCounter(Counters.QUERY_COUNT).increment(1);
                 }
             }
-
         }
-
     }
 
 
@@ -376,18 +379,18 @@ public class W2VQueryBidwordSort extends Configured implements Tool {
                         bid2sim.poll();
                     }
                 }
-
-                StringBuilder sb = new StringBuilder();
-                sb.append(query).append(Common.CTRL_A);
-
-                while (!bid2sim.isEmpty()) {
-                    TextPair temp = bid2sim.poll();
-                    sb.append(temp.getFirst()).append(Common.CTRL_C).append(temp.getSecond()).append(Common.CTRL_B);
-                }
-
-                context.write(new Text(sb.substring(0, sb.length() - 1)), null);
-                context.getCounter(Counters.QUERY_COUNT).increment(1);
             }
+            
+            StringBuilder sb = new StringBuilder();
+            sb.append(query).append(Common.CTRL_A);
+            
+            while (!bid2sim.isEmpty()) {
+                TextPair temp = bid2sim.poll();
+                sb.append(temp.getFirst()).append(Common.CTRL_C).append(temp.getSecond()).append(Common.CTRL_B);
+            }
+            
+            context.write(new Text(sb.substring(0, sb.length() - 1)), null);
+            context.getCounter(Counters.QUERY_COUNT).increment(1);
         }
     }
 }
