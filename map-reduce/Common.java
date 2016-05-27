@@ -213,22 +213,40 @@ public class Common {
     public static HashSet<Integer> getLSHList(float[] feature) {
         boolean[] bools = getLSHBoolenList(feature);
         HashSet<Integer> ret = new HashSet<Integer>();
+        
+        // circum hash with hamming distance 0
         ret.add(getBooleanListValue(bools));
+        
+        // circum hash with hamming distance 1
+        for (int i = 0; i < 12; i++) {
+            bools[i] = !bools[i];
+            ret.add(getBooleanListValue(bools));
+            bools[i] = !bools[i];
+        }
+        
+        // circum hash with hamming distance 2
         for (int i = 0; i < 12; i++) {
             for (int j = i + 1; j < 12; j++) {
                 bools[i] = !bools[i];
-                ret.add(getBooleanListValue(bools));
-                bools[i] = !bools[i];
-
                 bools[j] = !bools[j];
                 ret.add(getBooleanListValue(bools));
                 bools[j] = !bools[j];
-
                 bools[i] = !bools[i];
-                bools[j] = !bools[j];
-                ret.add(getBooleanListValue(bools));
-                bools[i] = !bools[i];
-                bools[j] = !bools[j];
+            }
+        }
+        
+        // circum hash with hamming distance 3
+        for (int i = 0; i < 12; i++) {
+            for (int j = i + 1; j < 12; j++) {
+                for (int k = j + 1; k < 12; k++) {
+                    bools[i] = !bools[i];
+                    bools[j] = !bools[j];
+                    bools[k] = !bools[k];
+                    ret.add(getBooleanListValue(bools));
+                    bools[k] = !bools[k];
+                    bools[j] = !bools[j];
+                    bools[i] = !bools[i];
+                }
             }
         }
         return ret;
