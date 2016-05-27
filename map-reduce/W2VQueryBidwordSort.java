@@ -47,13 +47,12 @@ public class W2VQueryBidwordSort extends Configured implements Tool {
         job.setJobName("nixingliang_w2v_query_bidword_sort");
 
         // INPUT PATH
-        String queryDir = "/home/hdp-guanggao/huangjingwen/data/query-vector/ds=2016-05-24";
-        String bidwordDir = "/home/hdp-guanggao/huangjingwen/data/bidword-vector/ds=2016-05-24";
+        String queryDir = "/home/hdp-guanggao/huangjingwen/data/query-norm-vector/ds=2016-05-24";
+        String bidwordDir = "/home/hdp-guanggao/huangjingwen/data/bidword-norm-vector/ds=2016-05-24";
         Path queryPath = new Path(queryDir + "/*");
         Path bidwordPath = new Path(bidwordDir + "/*");
         MultipleInputs.addInputPath(job, queryPath, TextInputFormat.class, QueryMap.class);
         MultipleInputs.addInputPath(job, bidwordPath, TextInputFormat.class, BidwordMap.class);
-
 
         // OUTPUT PATH
         String output = "/home/hdp-guanggao/huangjingwen/data/query-bidword-candidate/ds=2016-05-24";
@@ -82,9 +81,9 @@ public class W2VQueryBidwordSort extends Configured implements Tool {
         job.getConfiguration().setLong("mapred.job.max.map.running", 4000);
         job.getConfiguration().setLong("mapred.job.max.reduce.running", 1000);
         job.getConfiguration().set("mapred.job.priority", JobPriority.NORMAL.name());
-        job.getConfiguration().setLong("mapred.max.split.size", 128 * 1024 * 1024);
-        job.getConfiguration().setLong("mapred.min.split.size", 128 * 1024 * 1024);
-        job.getConfiguration().setLong("mapred.reduce.max.size.per.file", 128 * 1024 * 1024);
+        job.getConfiguration().setLong("mapred.max.split.size", 32 * 1024 * 1024);
+        job.getConfiguration().setLong("mapred.min.split.size", 32 * 1024 * 1024);
+        job.getConfiguration().setLong("mapred.reduce.max.size.per.file", 32 * 1024 * 1024);
         job.setOutputFormatClass(TextMultiOutputFormat.class);
 
         return job;
@@ -232,7 +231,7 @@ public class W2VQueryBidwordSort extends Configured implements Tool {
             // remove vector-nomalization logic
             //ArrayList<Float> bidwordNorms = new ArrayList<Float>();
             boolean printed = false;
-            int maxBidwordCount = 500; // modify bidword candidate set length from 1000 -> 500
+            int maxBidwordCount = 500;
 
             PriorityQueue<TextPair> bid2sim = new PriorityQueue<TextPair>(maxBidwordCount, new Comparator<TextPair>() {
                 @Override
