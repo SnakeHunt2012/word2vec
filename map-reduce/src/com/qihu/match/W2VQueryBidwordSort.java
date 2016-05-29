@@ -37,7 +37,7 @@ public class W2VQueryBidwordSort extends Configured implements Tool {
         System.exit(exitCode);
     }
 
-    public static Job configJob(Configuration contextConf) throws IOException, URISyntaxException {
+    public static Job configJob(Configuration contextConf, String date) throws IOException, URISyntaxException {
 //        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 //        String date_str = sdf.format(cal.getTime());
 
@@ -47,15 +47,15 @@ public class W2VQueryBidwordSort extends Configured implements Tool {
         job.setJobName("nixingliang_w2v_query_bidword_sort");
 
         // INPUT PATH
-        String queryDir = "/home/hdp-guanggao/huangjingwen/data/query-vector/ds=2016-05-24";
-        String bidwordDir = "/home/hdp-guanggao/huangjingwen/data/bidword-vector/ds=2016-05-24";
+        String queryDir = "/home/hdp-guanggao/huangjingwen/data/query-vector/ds=" + date;
+        String bidwordDir = "/home/hdp-guanggao/huangjingwen/data/bidword-vector/ds=" + date;
         Path queryPath = new Path(queryDir + "/*");
         Path bidwordPath = new Path(bidwordDir + "/*");
         MultipleInputs.addInputPath(job, queryPath, TextInputFormat.class, QueryMap.class);
         MultipleInputs.addInputPath(job, bidwordPath, TextInputFormat.class, BidwordMap.class);
 
         // OUTPUT PATH
-        String output = "/home/hdp-guanggao/huangjingwen/data/query-bidword-candidate/ds=2016-05-24";
+        String output = "/home/hdp-guanggao/huangjingwen/data/query-bidword-candidate/ds=" + date;
         Path outPath = new Path(output);
         FileOutputFormat.setOutputPath(job, outPath);
         FileSystem fs = FileSystem.get(job.getConfiguration());
@@ -89,9 +89,7 @@ public class W2VQueryBidwordSort extends Configured implements Tool {
         return job;
     }
 
-    public static Job configJob2(Configuration contextConf) throws IOException, URISyntaxException {
-//        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-//        String date_str = sdf.format(cal.getTime());
+    public static Job configJob2(Configuration contextConf, String date) throws IOException, URISyntaxException {
 
         // JOB INIT
         Job job = new Job(contextConf);
@@ -99,12 +97,12 @@ public class W2VQueryBidwordSort extends Configured implements Tool {
         job.setJobName("nixingliang_w2v_query_bidword_sort2");
 
         // INPUT PATH
-        String queryDir = "/home/hdp-guanggao/huangjingwen/data/query-bidword-candidate/ds=2016-05-24";
+        String queryDir = "/home/hdp-guanggao/huangjingwen/data/query-bidword-candidate/ds=" + date;
         Path queryPath = new Path(queryDir + "/*");
         MultipleInputs.addInputPath(job, queryPath, TextInputFormat.class, Map2.class);
 
         // OUTPUT PATH
-        String output = "/home/hdp-guanggao/huangjingwen/data/query-bidword/ds=2016-05-24";
+        String output = "/home/hdp-guanggao/huangjingwen/data/query-bidword/ds=" + date;
         Path outPath = new Path(output);
         FileOutputFormat.setOutputPath(job, outPath);
         FileSystem fs = FileSystem.get(job.getConfiguration());
@@ -137,12 +135,13 @@ public class W2VQueryBidwordSort extends Configured implements Tool {
 
     @Override
     public int run(String[] args) throws Exception {
+        String date = args[0];
         Configuration conf = getConf();
-        Job job = configJob(conf);
+        Job job = configJob(conf, date);
         if (!job.waitForCompletion(true))
             return -1;
 
-        job = configJob2(conf);
+        job = configJob2(conf, date);
         if (!job.waitForCompletion(true))
             return -1;
 
