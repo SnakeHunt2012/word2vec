@@ -47,8 +47,8 @@ public class W2VQueryBidwordSort extends Configured implements Tool {
         job.setJobName("nixingliang_w2v_query_bidword_sort");
 
         // INPUT PATH
-        String queryDir = "/home/hdp-guanggao/huangjingwen/data/query-norm-vector/ds=2016-05-24";
-        String bidwordDir = "/home/hdp-guanggao/huangjingwen/data/bidword-norm-vector/ds=2016-05-24";
+        String queryDir = "/home/hdp-guanggao/huangjingwen/data/query-vector/ds=2016-05-24";
+        String bidwordDir = "/home/hdp-guanggao/huangjingwen/data/bidword-vector/ds=2016-05-24";
         Path queryPath = new Path(queryDir + "/*");
         Path bidwordPath = new Path(bidwordDir + "/*");
         MultipleInputs.addInputPath(job, queryPath, TextInputFormat.class, QueryMap.class);
@@ -103,7 +103,6 @@ public class W2VQueryBidwordSort extends Configured implements Tool {
         Path queryPath = new Path(queryDir + "/*");
         MultipleInputs.addInputPath(job, queryPath, TextInputFormat.class, Map2.class);
 
-
         // OUTPUT PATH
         String output = "/home/hdp-guanggao/huangjingwen/data/query-bidword/ds=2016-05-24";
         Path outPath = new Path(output);
@@ -120,7 +119,6 @@ public class W2VQueryBidwordSort extends Configured implements Tool {
         // MR RUN
         job.setReducerClass(Reduce2.class);
         job.setNumReduceTasks(1000);
-
 
         // ALMOST NEVER CHANGE
         job.getConfiguration().set("mapreduce.user.classpath.first", "true");
@@ -182,10 +180,18 @@ public class W2VQueryBidwordSort extends Configured implements Tool {
 
             int hashId = Common.getLSH(feature);
 
-            context.write(new TextPair(hashId, 0F), new Text("0\t" + line));
+            // normalization
+            StringBuilder sb = new StringBuilder();
+            float bidwordNorm = (float) Math.sqrt(Common.getInnerProduct(feature, feature));
+            sb.append(line.split("\t", -1)[0]).append("\t");
+            for (int i = 0; i < 200 - 1; i++) {
+                sb.append(feature[i] / bidwordNorm).append(" ");
+            }
+            sb.append(feature[200 - 1]);
+
+            context.write(new TextPair(hashId, 0F), new Text("0\t" + sb.toString()));
             context.getCounter(Counters.BIDWORD_COUNT).increment(1);
-
-
+            
         }
     }
 
@@ -213,8 +219,17 @@ public class W2VQueryBidwordSort extends Configured implements Tool {
 
             HashSet<Integer> hashIds = Common.getLSHList(feature);
 
+            // normalization
+            StringBuilder sb = new StringBuilder();
+            float bidwordNorm = (float) Math.sqrt(Common.getInnerProduct(feature, feature));
+            sb.append(line.split("\t", -1)[0]).append("\t");
+            for (int i = 0; i < 200 - 1; i++) {
+                sb.append(feature[i] / bidwordNorm).append(" ");
+            }
+            sb.append(feature[200 - 1]);
+
             for (int i : hashIds) {
-                context.write(new TextPair(i, 1F), new Text("1\t" + line));
+                context.write(new TextPair(i, 1F), new Text("1\t" + sb.toString()));
                 context.getCounter(Counters.QUERY_HASH_COUNT).increment(1);
             }
             context.getCounter(Counters.QUERY_COUNT).increment(1);
