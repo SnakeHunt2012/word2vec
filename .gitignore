@@ -13,3 +13,4 @@ buffer
 *.pyc
 *.tsv
 *.json
+*.jar
