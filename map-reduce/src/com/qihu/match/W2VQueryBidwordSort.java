@@ -191,7 +191,7 @@ public class W2VQueryBidwordSort extends Configured implements Tool {
 
             context.write(new TextPair(hashId, 0F), new Text("0\t" + sb.toString()));
             context.getCounter(Counters.BIDWORD_COUNT).increment(1);
-            
+
         }
     }
 
@@ -281,12 +281,12 @@ public class W2VQueryBidwordSort extends Configured implements Tool {
                         feature[i] = Float.parseFloat(fields[i]);
                     }
 
-                    // remove vector-nomalization logic 
+                    // remove vector-nomalization logic
                     //float bidwordNorm = (float) Math.sqrt(Common.getInnerProduct(feature, feature));
 
                     bidwords.add(bidword);
                     vectors.add(feature);
-                    // remove vector-nomalization logic 
+                    // remove vector-nomalization logic
                     //bidwordNorms.add(bidwordNorm);
                 } else {
                     if (!printed) {
@@ -319,7 +319,7 @@ public class W2VQueryBidwordSort extends Configured implements Tool {
                         }
 
                         bid2sim.add(new TextPair(bidwords.get(i), similarity));
-                        
+
                         if (bid2sim.size() > maxBidwordCount) {
                             bid2sim.poll();
                         }
@@ -394,15 +394,15 @@ public class W2VQueryBidwordSort extends Configured implements Tool {
                     }
                 }
             }
-            
+
             StringBuilder sb = new StringBuilder();
             sb.append(query).append(Common.CTRL_A);
-            
+
             while (!bid2sim.isEmpty()) {
                 TextPair temp = bid2sim.poll();
                 sb.append(temp.getFirst()).append(Common.CTRL_C).append(temp.getSecond()).append(Common.CTRL_B);
             }
-            
+
             context.write(new Text(sb.substring(0, sb.length() - 1)), null);
             context.getCounter(Counters.QUERY_COUNT).increment(1);
         }
