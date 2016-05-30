@@ -32,6 +32,7 @@ def main():
     weight_dict = load_weight_dict(weight_file)
     word_set = set(weight_dict)
 
+    phrase_key_set = set([])
     with open(phrase_file, 'r') as fd:
         for line in fd:
             splited_line = line.strip().split("\t")
@@ -39,26 +40,27 @@ def main():
                 continue
             phrase_str, phrase_seg = splited_line
             phrase_seg_list = phrase_seg.split()
+
+            # uniq
+            phrase_key = " ".join(phrase_seg_list)
+            if phrase_key in phrase_key_set:
+                continue
+            else:
+                phrase_key_set.add(phrase_key)
+            
             phrase_seg_set = set(phrase_seg_list)
             outside_word_set = phrase_seg_set - word_set
             if len(outside_word_set) > 0:
                 if DEBUG_FLAG:
-                    print "###outsidewords###", " ".join(list(outside_word_set))
+                    print "### outsidewords ###", " ".join(list(outside_word_set))
                 for word in outside_word_set:
                     weight_dict[word] = 0.0
             weight_sum = sum([weight_dict[word] for word in phrase_seg_list])
-            if DEBUG_FLAG:
-                if weight_sum == 0.0:
-                    res_list = ["%s/%s" % (word, 1.0 / len(phrase_seg_list)) for word in phrase_seg_list]
-                else:
-                    res_list = ["%s/%s" % (word, weight_dict[word] / weight_sum) for word in phrase_seg_list]
-                print "%s\t%s" % (phrase_str, " ".join(res_list))
+            if weight_sum == 0.0:
+                res_list = ["%s%s" % (word, 1.0 / len(phrase_seg_list)) for word in phrase_seg_list]
             else:
-                if weight_sum == 0.0:
-                    res_list = ["%s%s" % (word, 1.0 / len(phrase_seg_list)) for word in phrase_seg_list]
-                else:
-                    res_list = ["%s%s" % (word, weight_dict[word] / weight_sum) for word in phrase_seg_list]
-                print "%s\t%s" % (phrase_str, "".join(res_list))
+                res_list = ["%s%s" % (word, weight_dict[word] / weight_sum) for word in phrase_seg_list]
+            print "%s\t%s" % (phrase_key, "".join(res_list))
     
     
 if __name__ == "__main__":
