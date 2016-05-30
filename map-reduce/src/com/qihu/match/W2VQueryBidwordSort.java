@@ -47,8 +47,8 @@ public class W2VQueryBidwordSort extends Configured implements Tool {
         job.setJobName("nixingliang_w2v_query_bidword_sort");
 
         // INPUT PATH
-        String queryDir = "/home/hdp-guanggao/huangjingwen/data/query-vector/ds=" + date;
-        String bidwordDir = "/home/hdp-guanggao/huangjingwen/data/bidword-vector/ds=" + date;
+        String queryDir = "/home/hdp-guanggao/hive/warehouse/hdp_guanggao.db/huangjingwen_query_vector/ds=" + date;
+        String bidwordDir = "/home/hdp-guanggao/hive/warehouse/hdp_guanggao.db/huangjingwen_bidword_vector/ds=" + date;
         Path queryPath = new Path(queryDir + "/*");
         Path bidwordPath = new Path(bidwordDir + "/*");
         MultipleInputs.addInputPath(job, queryPath, TextInputFormat.class, QueryMap.class);
@@ -135,7 +135,7 @@ public class W2VQueryBidwordSort extends Configured implements Tool {
 
     @Override
     public int run(String[] args) throws Exception {
-        String date = args[0];
+        String date = args[1];
         Configuration conf = getConf();
         Job job = configJob(conf, date);
         if (!job.waitForCompletion(true))
