@@ -372,7 +372,7 @@ def coincide_exclusion(query, bidword_list):
         intersection_length = sum([len(term) for term in intersection_set])
         count_intersection_rate = float(len(intersection_set)) / min(float(len(query_term_set)), float(len(bidword_term_set)))
         length_intersection_rate = float(intersection_length) / min(float(query_length), float(bidword_length))
-        if count_intersection_rate >= 0.6 or length_intersection_rate >= 0.6:
+        if count_intersection_rate >= 1.1 or length_intersection_rate >= 1.1:
             exc_list.append((bidword, score))
         else:
             res_list.append((bidword, score))
