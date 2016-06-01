@@ -1,6 +1,7 @@
 log/
 data/
 model/
+data-back/
 word2vec
 word2phrase
 bin2json
@@ -10,7 +11,9 @@ word-analogy
 compute-accuracy
 vocabulary.txt
 buffer
+*.log
 *.pyc
+*.bin
 *.tsv
 *.json
 *.jar
