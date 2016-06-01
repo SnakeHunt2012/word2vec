@@ -1,6 +1,24 @@
 #!/bin/bash
+# 
+# post-process.sh
+# Written by Jingwen HUANG <huangjingwen@360.cn>
+# Post-process of the query->bidword procedure.
+#
 
-INPUT=/home/hdp-guanggao/hive/warehouse/hdp_guanggao.db/w2v_query_bidword_sim_extension/ds=2016-05-21
+err_args=85
+
+function usage ()
+{
+    echo "Usage: `basename $0` xxxx-xx-xx"
+}
+
+case "$1" in
+    ""                    ) usage; exit ${err_args};;
+    [0-9]*-[0-9]*-[0-9]*  ) DATE=$1;;
+    *                     ) usage; exit ${err_args};;
+esac
+
+INPUT=/home/hdp-guanggao/hive/warehouse/hdp_guanggao.db/w2v_query_bidword_sim_extension/ds=${DATE}
 OUTPUT=/home/hdp-guanggao/huangjingwen/data/query-bidword-extension/raw
 
 STREAMING=/usr/bin/hadoop/software/hadoop/contrib/streaming/hadoop-streaming.jar
