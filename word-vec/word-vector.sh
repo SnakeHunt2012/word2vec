@@ -1,8 +1,8 @@
 #!/bin/bash
 # 
-# post-process.sh
+# word-vector.sh
 # Written by Jingwen HUANG <huangjingwen@360.cn>
-# Post-process of the query->bidword procedure.
+# Upload new word2vec data into table huangjingwen_word_vector
 #
 
 err_args=85
@@ -22,8 +22,7 @@ alias shadoop='sudo -E -u hdp-guanggao /usr/bin/hadoop/software/hadoop//bin/hado
 alias shive='sudo -u hdp-guanggao -E /usr/bin/hadoop/software/hive//bin/hive'
 shopt -s expand_aliases
 
-bash exclusion-stream.sh "${DATE}"
-bash extract-replace.sh "${DATE}"
-bash extract-result.sh "${DATE}"
-bash create-query-bidword-extension-table.sh "${DATE}"
-bash create-replace-record-table.sh "${DATE}"
+shadoop fs -mkdir "/home/hdp-guanggao/huangjingwen/data/word-vector/ds=${DATE}"
+shadoop fs -put vectors.tsv "/home/hdp-guanggao/huangjingwen/data/word-vector/ds=${DATE}"
+
+bash create-word-vector-table.sh "${DATE}"

@@ -14,16 +14,23 @@ def debug(debug_str):
     stdout.write(debug_str)
     stdout.flush()
 
-def load_vector_dict(json_file):
+def load_vector_dict(tsv_file):
 
-    with open(json_file, "r") as fd:
-        json_dict = loads(fd.read())
-
-    # normalize
-    for word in json_dict:
-        vector = json_dict[word]
-        json_dict[word] = vector / sqrt(dot(vector, vector))
-    return json_dict
+    word_dict = {}
+    with open(tsv_file, "r", encoding = "utf-8") as fd:
+        for line in fd:
+            splited_line = line.strip().split("\t")
+            if len(splited_line) != 2:
+                continue
+            word, vector = splited_line
+            if word not in word_dict:
+                word_dict[word] = [float(value) for value in vector.split()]
+                assert len(word_dict[word]) == 200
+    for word in word_dict:
+        norm = sqrt(dot(word_dict[word], word_dict[word]))
+        if norm > 0.0:
+            word_dict[word] = [val / norm for val in word_dict[word]]
+    return word_dict
 
 def load_suffix_set(tsv_file):
 
@@ -38,18 +45,18 @@ def load_suffix_set(tsv_file):
 def main():
 
     parser = ArgumentParser()
-    parser.add_argument("json_file", help = "word2vec file in json format")
-    parser.add_argument("tsv_file", help = "suffix word list")
+    parser.add_argument("dict_file", help = "word2vec file in tsv format")
+    parser.add_argument("suffix_file", help = "suffix word list")
     args = parser.parse_args()
 
     batch_size = 1000
 
-    json_file = args.json_file
-    tsv_file = args.tsv_file
+    dict_file = args.dict_file
+    suffix_file = args.suffix_file
     
-    word_dict = load_vector_dict(json_file)
+    word_dict = load_vector_dict(dict_file)
     word_list = list(word_dict)
-    suffix_set = load_suffix_set(tsv_file)
+    suffix_set = load_suffix_set(suffix_file)
     suffix_list = list(suffix_set)
 
     suffix_matrix = zeros((len(suffix_list), 200), dtype = "float32")

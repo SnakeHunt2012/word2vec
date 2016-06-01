@@ -1,9 +1,4 @@
 #!/bin/bash
-# 
-# post-process.sh
-# Written by Jingwen HUANG <huangjingwen@360.cn>
-# Post-process of the query->bidword procedure.
-#
 
 err_args=85
 
@@ -18,8 +13,8 @@ case "$1" in
     *                     ) usage; exit ${err_args};;
 esac
 
-INPUT=/home/hdp-guanggao/hive/warehouse/hdp_guanggao.db/w2v_query_bidword_sim_extension/ds=${DATE}
-OUTPUT=/home/hdp-guanggao/huangjingwen/data/query-bidword-extension/raw
+INPUT="/home/hdp-guanggao/huangjingwen/data/query-bidword-extension/raw"
+OUTPUT="/home/hdp-guanggao/huangjingwen/data/replace-record/ds=${DATE}"
 
 STREAMING=/usr/bin/hadoop/software/hadoop/contrib/streaming/hadoop-streaming.jar
 
@@ -41,11 +36,6 @@ shadoop jar $STREAMING \
 -inputformat org.apache.hadoop.mapred.lib.CombineTextInputFormat \
 -input $INPUT \
 -output $OUTPUT \
--mapper './anaconda/bin/python exclusion-stream.py category-brand.tsv china-higher-location.tsv school-with-synonym.tsv stock-seg-dict.tsv' \
--file exclusion-stream.py \
--file category-brand.tsv \
--file china-higher-location.tsv \
--file school-with-synonym.tsv \
--file stock-seg-dict.tsv \
+-mapper './anaconda/bin/python extract-replace.py' \
+-file extract-replace.py \
 -cacheArchive '/home/hdp-guanggao/huangjingwen/lib/anaconda.tar.gz#anaconda'        
-

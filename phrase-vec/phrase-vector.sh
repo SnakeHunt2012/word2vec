@@ -1,8 +1,8 @@
 #!/bin/bash
 # 
-# post-process.sh
+# phrase-vector.sh
 # Written by Jingwen HUANG <huangjingwen@360.cn>
-# Post-process of the query->bidword procedure.
+# Convert phrase (query/bidword) to vector.
 #
 
 err_args=85
@@ -22,8 +22,5 @@ alias shadoop='sudo -E -u hdp-guanggao /usr/bin/hadoop/software/hadoop//bin/hado
 alias shive='sudo -u hdp-guanggao -E /usr/bin/hadoop/software/hive//bin/hive'
 shopt -s expand_aliases
 
-bash exclusion-stream.sh "${DATE}"
-bash extract-replace.sh "${DATE}"
-bash extract-result.sh "${DATE}"
-bash create-query-bidword-extension-table.sh "${DATE}"
-bash create-replace-record-table.sh "${DATE}"
+bash create-query-vector-table.sh "${DATE}"
+bash create-bidword-vector-table.sh "${DATE}"
