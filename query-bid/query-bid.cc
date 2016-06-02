@@ -5,7 +5,7 @@
 using namespace std;
 
 const char *argp_program_version = "query-bid 1.0";
-const char *argp_program_bug_address = "<huangjingwen@360.cn>";
+const char *argp_program_bug_address = "<SnakeHunt2012@gmail.com>";
 
 static char prog_doc[] = "Find the most relevent bidwords for each given query."; /* Program documentation. */
 static char args_doc[] = "QUERY_FILE BIDWORD_FILE"; /* A description of the arguments we accept. */
