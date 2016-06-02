@@ -1,7 +1,7 @@
 #!/bin/bash
 # 
 # post-process.sh
-# Written by Jingwen HUANG <huangjingwen@360.cn>
+# Written by Jingwen HUANG <SnakeHunt2012@gmail.com>
 # Post-process of the query->bidword procedure.
 #
 
