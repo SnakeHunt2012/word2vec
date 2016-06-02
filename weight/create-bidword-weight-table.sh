@@ -1,7 +1,7 @@
 #!/bin/bash
 # 
 # create-bidword-weight-table.sh
-# Written by Jingwen HUANG <huangjingwen@360.cn>
+# Written by Jingwen HUANG <SnakeHunt2012@gmail.com>
 # Upload bidword weight from bidword-weight.tsv in format bidword\tterm^Bweight^Aterm^Bweight ...
 #
 

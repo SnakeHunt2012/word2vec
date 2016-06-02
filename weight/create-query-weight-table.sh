@@ -1,7 +1,7 @@
 #!/bin/bash
 # 
 # create-query-weight-table.sh
-# Written by Jingwen HUANG <huangjingwen@360.cn>
+# Written by Jingwen HUANG <SnakeHunt2012@gmail.com>
 # Upload query weight from query-weight.tsv in format query\tterm^Bweight^Aterm^Bweight ...
 #
 

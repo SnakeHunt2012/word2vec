@@ -1,7 +1,7 @@
 #!/bin/bash
 # 
 # create-word-vector-table.sh
-# Written by Jingwen HUANG <huangjingwen@360.cn>
+# Written by Jingwen HUANG <SnakeHunt2012@gmail.com>
 # Upload word vectors from vectors.tsv in format word\tfloat float float ...
 #
 

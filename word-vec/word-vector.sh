@@ -1,7 +1,7 @@
 #!/bin/bash
 # 
 # word-vector.sh
-# Written by Jingwen HUANG <huangjingwen@360.cn>
+# Written by Jingwen HUANG <SnakeHunt2012@gmail.com>
 # Upload new word2vec data into table huangjingwen_word_vector
 #
 

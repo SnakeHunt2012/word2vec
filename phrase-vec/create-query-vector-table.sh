@@ -1,7 +1,7 @@
 #!/bin/bash
 # 
 # create-query-vector-table.sh
-# Written by Jingwen HUANG <huangjingwen@360.cn>
+# Written by Jingwen HUANG <SnakeHunt2012@gmail.com>
 # Generate query vector from query\t[seg^Cweight]* table.
 #
 

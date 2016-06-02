@@ -1,14 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8
 
-from sys import stdin, stdout
-from threading import Thread
+from sys import stdin
 from codecs import open
-from json import loads
 from numpy import array, zeros, dot, sqrt
-from hashlib import md5
 from argparse import ArgumentParser
-from progressbar import ProgressBar, Bar
 from theano import tensor, function
 
 tensor_vector = tensor.vector()
@@ -78,16 +74,68 @@ def print_phrase_sim(word_dict, phrase_one, phrase_two):
     word_two_length = sqrt(dot(word_two_vector, word_two_vector))
     print dot(word_one_vector, word_two_vector) / word_one_length / word_two_length
 
+def print_phrase_weight_sim(word_dict, phrase_one, weight_one, phrase_two, weight_two):
+    
+    word_list_one = phrase_one.split("+")
+    word_list_two = phrase_two.split("+")
+    weight_list_one = [float(value) for value in weight_one.split("+")]
+    weight_list_two = [float(value) for value in weight_two.split("+")]
+
+    if len(weight_list_one) != len(word_list_one):
+        print "phrase one length dosen't match:", len(word_list_one), len(weight_list_one)
+    
+    if len(weight_list_two) != len(word_list_two):
+        print "phrase one length dosen't match:", len(word_list_two), len(weight_list_two)
+    
+    for word in word_list_one + word_list_two:
+        if word not in word_dict:
+            print word, "not in dict"
+            return
+
+    word_count = 0
+    vector = zeros(200, dtype = "float32")
+    for word, weight in zip(word_list_one, weight_list_one):
+        if word in word_dict:
+            vector += array(word_dict[word], dtype = "float32") * weight
+            word_count += 1
+    if word_count > 0:
+        vector /= word_count
+    word_one_vector = vector
+        
+    word_count = 0
+    vector = zeros(200, dtype = "float32")
+    for word, weight in zip(word_list_two, weight_list_two):
+        if word in word_dict:
+            vector += array(word_dict[word], dtype = "float32") * weight
+            word_count += 1
+    if word_count > 0:
+        vector /= word_count
+    word_two_vector = vector
+        
+    word_one_length = sqrt(dot(word_one_vector, word_one_vector))
+    word_two_length = sqrt(dot(word_two_vector, word_two_vector))
+    print dot(word_one_vector, word_two_vector) / word_one_length / word_two_length
+    # debug
+    print " ".join(["%6f" % value for value in word_one_vector])
+    print " ".join(["%6f" % value for value in word_two_vector])
+
 def interactive(word_dict):
 
     print "Usage: input \"word\" for vector length or \"word+word word+word\" for sim score"
     while True:
-        line = stdin.readline().strip().decode("utf-8")
-        if len(line.split()) == 1:
-            print_word_length(word_dict, line.split()[0])
-        
-        if len(line.split()) == 2:
-            print_phrase_sim(word_dict, line.split()[0], line.split()[1])
+        try:
+            line = stdin.readline().strip().decode("utf-8")
+            if len(line.split()) == 1:
+                print_word_length(word_dict, line.split()[0])
+            
+            if len(line.split()) == 2:
+                print_phrase_sim(word_dict, line.split()[0], line.split()[1])
+    
+            if len(line.split()) == 4:
+                print_phrase_weight_sim(word_dict, line.split()[0], line.split()[1], line.split()[2], line.split()[3])
+        except Exception, e:
+            print e
+            continue
 
 def main():
 

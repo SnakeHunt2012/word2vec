@@ -1,7 +1,7 @@
 #!/bin/bash
 # 
 # prev-process.sh
-# Written by Jingwen HUANG <huangjingwen@360.cn>
+# Written by Jingwen HUANG <SnakeHunt2012@gmail.com>
 # Segment and trim query/bidword, then upload table huangjingwen_query/bidword_triple.
 #
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 # 
 # weight.sh
-# Written by Jingwen HUANG <huangjingwen@360.cn>
+# Written by Jingwen HUANG <SnakeHunt2012@gmail.com>
 # Patch weight into query/bidword-clean.tsv > query/bidword-weight.tsv
 #
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 # 
 # phrase-vector.sh
-# Written by Jingwen HUANG <huangjingwen@360.cn>
+# Written by Jingwen HUANG <SnakeHunt2012@gmail.com>
 # Convert phrase (query/bidword) to vector.
 #
 

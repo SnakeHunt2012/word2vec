@@ -1,7 +1,7 @@
 #!/bin/bash
 # 
 # create-bidword-vector-table.sh
-# Written by Jingwen HUANG <huangjingwen@360.cn>
+# Written by Jingwen HUANG <SnakeHunt2012@gmail.com>
 # Generate bidword vector from bidword\t[seg^Cweight]* table.
 #
 
