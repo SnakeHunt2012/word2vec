@@ -18,7 +18,7 @@ case "$1" in
     *                     ) usage; exit ${err_args};;
 esac
 
-g++ tag.cc -o tag -l postagger -l parser
+g++ tag.cc -o tag -l postagger -l parser -l pthread
 chmod +x tag
 
 STREAMING=/usr/bin/hadoop/software/hadoop/contrib/streaming/hadoop-streaming.jar
